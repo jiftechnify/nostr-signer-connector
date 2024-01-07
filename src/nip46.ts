@@ -7,6 +7,7 @@ import {
 } from "nostr-tools";
 import { decode as decodeNip19 } from "nostr-tools/nip19";
 import type { NostrSigner } from "./interface";
+import { SecretKeySigner } from "./secret_key";
 
 const currentUnixtimeSec = () => Math.floor(Date.now() / 1000);
 
@@ -294,26 +295,6 @@ export class Nip46RemoteSigner implements NostrSigner {
   }
 
   /**
-   * Connects to a NIP-46 remote signer with connection token and returns a handle for the remote signer if succeeds.
-   *
-   * The NostrSigner given as `localSigner` is used for encrypting a RPC request payload, sigining a RPC request event (kind: 24133) and decrypting a RPC response payload.
-   *
-   * If the given connection token doesn't have relays part, default relays used by nsecbunkerd are used for RPC communications.
-   */
-  public static async connect(
-    localSigner: NostrSigner,
-    connToken: string,
-    operationTimeoutMs = 15 * 1000,
-  ): Promise<Nip46RemoteSigner> {
-    try {
-      const connParams = parseNip46ConnectionToken(connToken);
-      return Nip46RemoteSigner.connectWithParams(localSigner, connParams, operationTimeoutMs);
-    } catch {
-      throw Error("given NIP-46 connection token is invalid");
-    }
-  }
-
-  /**
    * Connects to a NIP-46 remote signer with raw connection parameters.
    */
   public static async connectWithParams(
@@ -349,6 +330,62 @@ export class Nip46RemoteSigner implements NostrSigner {
       }
       throw err;
     }
+  }
+
+  /**
+   * Connects to a NIP-46 remote signer with connection token and returns a handle for the remote signer if succeeds.
+   *
+   * The NostrSigner given as `localSigner` is used for encrypting a RPC request payload, sigining a RPC request event (kind: 24133) and decrypting a RPC response payload.
+   *
+   * If the given connection token doesn't have relays part, default relays used by nsecbunkerd are used for RPC communications.
+   */
+  public static async connect(
+    localSigner: NostrSigner,
+    connToken: string,
+    operationTimeoutMs = 15 * 1000,
+  ): Promise<Nip46RemoteSigner> {
+    try {
+      const connParams = parseNip46ConnectionToken(connToken);
+      return Nip46RemoteSigner.connectWithParams(localSigner, connParams, operationTimeoutMs);
+    } catch {
+      throw Error("given NIP-46 connection token is invalid");
+    }
+  }
+
+  /**
+   * Starts a "session" to a NIP-46 remote signer.
+   *
+   * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with a random secret key.
+   * The secret key in the `localSigner` acts as a "session key", and it is returned along with a handle for the remote signer.
+   */
+  public static async startSession(
+    connToken: string,
+    operationTimeoutMs = 15 * 1000,
+  ): Promise<{
+    sessionKey: string;
+    signer: Nip46RemoteSigner;
+  }> {
+    const localSigner = SecretKeySigner.withRandomKey();
+    const sessionKey = localSigner.secretKey;
+
+    return {
+      sessionKey,
+      signer: await Nip46RemoteSigner.connect(localSigner, connToken, operationTimeoutMs),
+    };
+  }
+
+  /**
+   * Resumes a "session" to a NIP-46 remote signer.
+   *
+   * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with the given session key.
+   */
+  public static async resumeSession(
+    sessionKey: string,
+    connToken: string,
+    operationTimeoutMs = 15 * 1000,
+  ): Promise<Nip46RemoteSigner> {
+    const localSigner = new SecretKeySigner(sessionKey);
+    return Nip46RemoteSigner.connect(localSigner, connToken, operationTimeoutMs);
   }
 
   public dispose() {
