@@ -1,6 +1,6 @@
 {
   "name": "nostr-signer-connector",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "type": "module",
@@ -13,7 +13,17 @@
   "author": "jiftechnify <jiftech.stlfy@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "build": "node build.js"
+    "prepack": "yarn build",
+    "tsc": "tsc",
+    "lint": "run-p tsc lint:*",
+    "lint:format": "prettier --check --log-level warn src/**/*.ts",
+    "lint:js": "eslint --max-warnings 0 src/",
+    "fix": "run-s fix:*",
+    "fix:format": "prettier --write --log-level warn src/**/*.ts",
+    "fix:js": "eslint --fix src/",
+    "build": "node build.js",
+    "bump-version": "lerna version",
+    "release": "lerna publish --from-package"
   },
   "dependencies": {
     "@noble/hashes": "1.3.1",
@@ -21,6 +31,9 @@
     "nostr-typedef": "^0.8.0"
   },
   "devDependencies": {
+    "@lerna-lite/cli": "^3.2.0",
+    "@lerna-lite/publish": "^3.2.0",
+    "@lerna-lite/version": "^3.2.0",
     "@noble/hashes": "1.3.1",
     "@tsconfig/strictest": "^2.0.2",
     "@types/fs-extra": "^11.0.4",
