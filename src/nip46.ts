@@ -1,11 +1,6 @@
-import {
-  Relay,
-  SimplePool,
-  SubCloser,
-  type Event as NostrEvent,
-  type EventTemplate as NostrEventTemplate,
-} from "nostr-tools";
+import { type Filter, type Event as NostrEvent, type EventTemplate as NostrEventTemplate } from "nostr-tools";
 import { decode as decodeNip19 } from "nostr-tools/nip19";
+import { RxNostr, createRxForwardReq, createRxNostr, uniq } from "rx-nostr";
 import type { NostrSigner } from "./interface";
 import { SecretKeySigner } from "./secret_key";
 
@@ -27,6 +22,54 @@ class Deferred<T> {
       this.reject = (e) => {
         reject(e);
       };
+    });
+  }
+}
+
+type RelayPool = {
+  // starts to subscribe events
+  subscribe(filter: Filter, onEvent: (ev: NostrEvent) => void): () => void;
+  // publishes a Nostr event
+  publish(ev: NostrEvent): void;
+  // try to reconnect to all relays
+  reconnectAll(): void;
+};
+
+class RxNostrRelayPool implements RelayPool {
+  #rxn: RxNostr;
+  #relayUrls: string[];
+
+  constructor(relayUrls: string[]) {
+    this.#relayUrls = relayUrls;
+
+    const rxn = createRxNostr({ skipFetchNip11: true });
+    rxn.setDefaultRelays(relayUrls);
+
+    rxn.createConnectionStateObservable().subscribe(({ from: rurl, state }) => {
+      console.log(`[Nip46RemoteSigner] ${rurl}: connection state changed to ${state}`);
+    });
+
+    this.#rxn = rxn;
+  }
+
+  subscribe(filter: Filter, onEvent: (ev: NostrEvent) => void): () => void {
+    const req = createRxForwardReq();
+    const sub = this.#rxn
+      .use(req)
+      .pipe(uniq())
+      .subscribe(({ event }) => onEvent(event));
+
+    req.emit({ ...filter, since: currentUnixtimeSec });
+    return () => sub.unsubscribe();
+  }
+
+  publish(ev: NostrEvent): void {
+    this.#rxn.send(ev);
+  }
+
+  reconnectAll(): void {
+    this.#relayUrls.map((rurl) => {
+      this.#rxn.reconnect(rurl);
     });
   }
 }
@@ -175,43 +218,24 @@ const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"
 /**
  * An implementaion of NostrSigner based on a [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer (a.k.a. Nostr Connect or nsecBunker).
  */
-export class Nip46RemoteSigner implements NostrSigner {
+export class Nip46RemoteSigner implements NostrSigner, Disposable {
   #localSigner: NostrSigner;
   #remotePubkey: string;
 
-  #relayUrls: string[];
-  #relayPool: SimplePool;
-  #subCloser: SubCloser | undefined = undefined;
+  #relayPool: RelayPool;
+  #closeSub: (() => void) | undefined = undefined;
 
   #inflightRpcs: Map<string, Deferred<string>> = new Map();
   #opTimeoutMs: number;
 
-  private constructor(
-    localSigner: NostrSigner,
-    remotePubkey: string,
-    relayPool: SimplePool,
-    relayUrls: string[],
-    opTimeoutMs: number,
-  ) {
+  private constructor(localSigner: NostrSigner, remotePubkey: string, relayPool: RelayPool, opTimeoutMs: number) {
     this.#localSigner = localSigner;
     this.#remotePubkey = remotePubkey;
     this.#relayPool = relayPool;
-    this.#relayUrls = relayUrls;
     this.#opTimeoutMs = opTimeoutMs;
   }
 
   async #startRpcRespSubscription() {
-    const connResults = await Promise.allSettled(
-      this.#relayUrls.map((rurl) => this.#relayPool.ensureRelay(rurl, { connectionTimeout: 5000 })),
-    );
-    const connectedRelays = connResults.reduce(
-      (rs, r) => (r.status === "fulfilled" ? [...rs, r.value] : rs),
-      [] as Relay[],
-    );
-    if (connectedRelays.length === 0) {
-      throw Error("failed to connect to relays for NIP-46 RPC");
-    }
-
     const localPubkey = await this.#localSigner.getPublicKey();
 
     const onevent = async (ev: NostrEvent) => {
@@ -244,10 +268,7 @@ export class Nip46RemoteSigner implements NostrSigner {
         this.#inflightRpcs.delete(rpcId);
       }
     };
-
-    this.#subCloser = this.#relayPool.subscribeMany(this.#relayUrls, [{ kinds: [24133], "#p": [localPubkey] }], {
-      onevent,
-    });
+    this.#closeSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
   }
 
   #startWaitingRpcResp(rpcId: string, timeoutMs: number): Deferred<string> {
@@ -286,8 +307,8 @@ export class Nip46RemoteSigner implements NostrSigner {
       content: cipheredReq,
       created_at: currentUnixtimeSec(),
     };
-    const signed = await this.#localSigner.signEvent(reqEv);
-    this.#relayPool.publish(this.#relayUrls, signed);
+    const signedReqEv = await this.#localSigner.signEvent(reqEv);
+    this.#relayPool.publish(signedReqEv);
 
     // rethrows if RPC result in error.
     const rawResp = await respWaiter.promise;
@@ -302,10 +323,10 @@ export class Nip46RemoteSigner implements NostrSigner {
     { remotePubkey, secretToken, relayUrls }: Nip46ConnectionParams,
     operationTimeoutMs: number,
   ): Promise<Nip46RemoteSigner> {
-    const relayPool = new SimplePool();
     const finalRelayUrls = relayUrls ? relayUrls : defaultNip46Relays;
+    const relayPool = new RxNostrRelayPool(finalRelayUrls);
 
-    const signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, finalRelayUrls, operationTimeoutMs);
+    const signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
     await signer.#startRpcRespSubscription();
 
     // perform connection handshake
@@ -388,14 +409,6 @@ export class Nip46RemoteSigner implements NostrSigner {
     return Nip46RemoteSigner.connect(localSigner, connToken, operationTimeoutMs);
   }
 
-  public dispose() {
-    this.#subCloser?.close();
-  }
-
-  public [Symbol.dispose]() {
-    this.dispose();
-  }
-
   /**
    * Returns the public key that corresponds to the underlying secret key, in hex string format.
    */
@@ -438,5 +451,24 @@ export class Nip46RemoteSigner implements NostrSigner {
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
     return this.#requestNip46Rpc("nip04_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+  }
+
+  /**
+   * Tries to reconnect to all the relays that are used to communicate with the remote signer.
+   */
+  public reconnectToRpcRelays() {
+    this.#relayPool.reconnectAll();
+  }
+
+  public dispose() {
+    if (this.#closeSub !== undefined) {
+      this.#closeSub?.();
+      this.#closeSub = undefined;
+    }
+    this.#inflightRpcs.clear();
+  }
+
+  public [Symbol.dispose]() {
+    this.dispose();
   }
 }
