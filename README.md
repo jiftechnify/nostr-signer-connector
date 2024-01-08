@@ -19,7 +19,7 @@ export type NostrSigner = {
   /**
    * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in NIP-04.
    */
-  nip04Encrypt(recipentPubkey: string, plaintext: string): Promise<string>;
+  nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string>;
 
   /**
    * Decrypts a given ciphertext from others, by the decryption algorithm defined in NIP-04.
