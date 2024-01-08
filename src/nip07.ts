@@ -11,7 +11,7 @@ export type Nip07Extension = {
 };
 
 /**
- * An implementaion of NostrSigner based on a [NIP-07](https://github.com/nostr-protocol/nips/blob/master/07.md) browser extension.
+ * An implementation of NostrSigner based on a [NIP-07](https://github.com/nostr-protocol/nips/blob/master/07.md) browser extension.
  *
  * NOTE: `nip04Encrypt` and `nip04Decrypt` throws error if the underlying NIP-07 extension doesn't support the NIP-04 capabilities.
  */
@@ -47,15 +47,15 @@ export class Nip07ExtensionSigner implements NostrSigner {
   /**
    * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md).
    *
-   * @param recipentPubkey a public key of a message recipent, in hex string format
+   * @param recipientPubkey a public key of a message recipient, in hex string format
    * @param plaintext a plaintext to encrypt
    * @returns a Promise that resolves to a encrypted text
    */
-  public async nip04Encrypt(recipentPubkey: string, plaintext: string): Promise<string> {
+  public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
     if (this.#nip07Ext.nip04 === undefined) {
       throw Error("NIP-07 browser extension doesn't support nip04.encrypt");
     }
-    return this.#nip07Ext.nip04.encrypt(recipentPubkey, plaintext);
+    return this.#nip07Ext.nip04.encrypt(recipientPubkey, plaintext);
   }
 
   /**

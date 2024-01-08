@@ -74,7 +74,7 @@ export class SecretKeySigner implements NostrSigner {
   }
 
   /**
-   * Signs a given Nostr event with the undelying secret key.
+   * Signs a given Nostr event with the underlying secret key.
    *
    * @param event a Nostr event template (unsigned event)
    * @returns a Promise that resolves to a signed Nostr event
@@ -86,12 +86,12 @@ export class SecretKeySigner implements NostrSigner {
   /**
    * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-04]().
    *
-   * @param recipentPubkey a public key of a message recipent, in hex string format
+   * @param recipientPubkey a public key of a message recipient, in hex string format
    * @param plaintext a plaintext to encrypt
    * @returns a Promise that resolves to a encrypted text
    */
-  public async nip04Encrypt(recipentPubkey: string, plaintext: string): Promise<string> {
-    return nip04.encrypt(this.#secKeyHex, recipentPubkey, plaintext);
+  public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
+    return nip04.encrypt(this.#secKeyHex, recipientPubkey, plaintext);
   }
 
   /**

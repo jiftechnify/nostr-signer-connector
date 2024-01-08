@@ -20,11 +20,11 @@ export type NostrSigner = {
   /**
    * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md).
    *
-   * @param recipentPubkey a public key of a message recipent, in hex string format
+   * @param recipientPubkey a public key of a message recipient, in hex string format
    * @param plaintext a plaintext to encrypt
    * @returns a Promise that resolves to a encrypted text
    */
-  nip04Encrypt(recipentPubkey: string, plaintext: string): Promise<string>;
+  nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string>;
 
   /**
    * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md).

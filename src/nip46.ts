@@ -216,7 +216,7 @@ const generateRpcId = () => Math.random().toString(32).substring(2, 8);
 const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"];
 
 /**
- * An implementaion of NostrSigner based on a [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer (a.k.a. Nostr Connect or nsecBunker).
+ * An implementation of NostrSigner based on a [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer (a.k.a. Nostr Connect or nsecBunker).
  */
 export class Nip46RemoteSigner implements NostrSigner, Disposable {
   #localSigner: NostrSigner;
@@ -344,7 +344,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       return signer;
     } catch (err) {
       // HACK: nsecBunker returns error if you connect twice to it with the same token. However, in spite of the error, other methods still work with the token.
-      // It seems that Coracle just ignores this error on conenct, and we follow the behavior here.
+      // It seems that Coracle just ignores this error on connect, and we follow the behavior here.
       if (err instanceof Error && err.message.includes("Token already redeemed")) {
         console.log("ignoring 'Token already redeemed' error on connect from remote signer");
         return signer;
@@ -434,12 +434,12 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   /**
    * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md).
    *
-   * @param recipentPubkey a public key of a message recipent, in hex string format
+   * @param recipientPubkey a public key of a message recipient, in hex string format
    * @param plaintext a plaintext to encrypt
    * @returns a Promise that resolves to a encrypted text
    */
-  public async nip04Encrypt(recipentPubkey: string, plaintext: string): Promise<string> {
-    return this.#requestNip46Rpc("nip04_encrypt", [recipentPubkey, plaintext], this.#opTimeoutMs);
+  public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
+    return this.#requestNip46Rpc("nip04_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
   }
 
   /**
