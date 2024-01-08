@@ -28,7 +28,7 @@
     "fix:js": "eslint --fix src/",
     "build": "node build.js",
     "bump-version": "lerna version",
-    "release": "lerna publish --from-package"
+    "release": "lerna publish from-package"
   },
   "dependencies": {
     "@noble/hashes": "1.3.1",
