@@ -19,7 +19,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
   #nip07Ext: Nip07Extension;
 
   /**
-   * Makes a Nip07ExtensionSigner from an instance of NIP-07 browser extension.
+   * Creates a Nip07ExtensionSigner from an instance of NIP-07 browser extension.
    *
    * @param nip07Ext an instance of NIP-07 extension (`window.nostr`)
    */

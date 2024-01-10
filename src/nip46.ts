@@ -1,6 +1,6 @@
 import { type Filter, type Event as NostrEvent, type EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { decode as decodeNip19 } from "nostr-tools/nip19";
 import { RxNostr, createRxForwardReq, createRxNostr, uniq } from "rx-nostr";
+import { parsePubkey } from "./helpers";
 import type { NostrSigner } from "./interface";
 import { SecretKeySigner } from "./secret_key";
 
@@ -142,16 +142,6 @@ type Nip46ConnectionParams = {
   relayUrls?: string[] | undefined;
 };
 
-const decodePubkey = (pubkey: string): string | undefined => {
-  if (pubkey.startsWith("npub1")) {
-    return decodeNip19(pubkey as `npub1${string}`).data;
-  }
-  if (/[0-9a-f]{64}/.test(pubkey)) {
-    return pubkey;
-  }
-  return undefined;
-};
-
 const parseNip46ConnectionToken = (token: string): Nip46ConnectionParams => {
   let parts: {
     pubkey: string;
@@ -190,7 +180,7 @@ const parseNip46ConnectionToken = (token: string): Nip46ConnectionParams => {
     }
   }
 
-  const pubkey = decodePubkey(parts.pubkey);
+  const pubkey = parsePubkey(parts.pubkey);
   if (pubkey === undefined) {
     throw Error("connection token contains invalid pubkey");
   }
