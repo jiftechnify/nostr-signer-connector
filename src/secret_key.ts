@@ -1,4 +1,4 @@
-import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
+import { bytesToHex } from "@noble/hashes/utils";
 import {
   finalizeEvent,
   generateSecretKey,
@@ -7,14 +7,15 @@ import {
   type EventTemplate as NostrEventTemplate,
 } from "nostr-tools";
 import * as nip04 from "nostr-tools/nip04";
+import { parseSecKey } from "./helpers";
 import type { NostrSigner } from "./interface";
 
 /**
  * An implementation of NostrSigner based on a bare secret key in memory.
  *
- * You can make a SecretKeySigner in two ways:
+ * You can create a SecretKeySigner in two ways:
  *
- * - via the constructor (`new SecretKeySigner(key)`), from secret keys in hex string or binary format.
+ * - via the constructor (`new SecretKeySigner(key)`), from secret keys in hex string, bech32 (`nsec1...`) or binary format.
  * - via `SecretKeySigner.withRandomKey()`, to make a signer with a random key.
  */
 export class SecretKeySigner implements NostrSigner {
@@ -22,14 +23,14 @@ export class SecretKeySigner implements NostrSigner {
   #secKeyBytes: Uint8Array;
 
   /**
-   * Makes a SecretKeySigner from a secret key in hex string format.
+   * Creates a SecretKeySigner from a secret key in hex string or bech32 (`nsec1...`) format.
    *
-   * @param secKeyHex a secret key in hex string
+   * @param secKeyStr a secret key in hex string or bech32 format
    */
-  public constructor(secKeyHex: string);
+  public constructor(secKeyStr: string);
 
   /**
-   * Makes a SecretKeySigner from a secret key in binary format.
+   * Creates a SecretKeySigner from a secret key in binary format.
    *
    * @param secKeyBytes a secret key in binary format (`Uint8Array`)
    */
@@ -37,9 +38,17 @@ export class SecretKeySigner implements NostrSigner {
 
   public constructor(secKey: string | Uint8Array) {
     if (typeof secKey === "string") {
-      this.#secKeyHex = secKey;
-      this.#secKeyBytes = hexToBytes(secKey);
+      const res = parseSecKey(secKey);
+      if (res === undefined) {
+        throw Error("SecretKeySigner: constructor got an invalid secret key");
+      }
+      this.#secKeyHex = res.hex;
+      this.#secKeyBytes = res.bytes;
     } else {
+      // secret key must be 32 bytes length.
+      if (secKey.length !== 32) {
+        throw Error("SecretKeySigner: constructor got an invalid secret key");
+      }
       this.#secKeyBytes = secKey;
       this.#secKeyHex = bytesToHex(secKey);
     }
@@ -84,7 +93,7 @@ export class SecretKeySigner implements NostrSigner {
   }
 
   /**
-   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-04]().
+   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md).
    *
    * @param recipientPubkey a public key of a message recipient, in hex string format
    * @param plaintext a plaintext to encrypt
@@ -95,7 +104,7 @@ export class SecretKeySigner implements NostrSigner {
   }
 
   /**
-   * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-04]().
+   * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-04](https://github.com/nostr-protocol/nips/blob/master/04.md).
    *
    * @param senderPubkey a public key of a message sender, in hex string format
    * @param ciphertext a ciphertext to decrypt
