@@ -243,7 +243,10 @@ const parseConnToken = (token: string): Nip46ConnectionParams => {
     throw Error("connection token contains invalid pubkey");
   }
 
-  const relayUrls = parts.relays?.replace("relay=", "").split("&relay=");
+  const relayUrls = parts.relays
+    ?.replace("relay=", "")
+    .split("&relay=")
+    .map((r) => decodeURIComponent(r));
   try {
     relayUrls?.forEach((r) => new URL(r));
   } catch {
