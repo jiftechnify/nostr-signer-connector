@@ -34,6 +34,8 @@ type RelayPool = {
   publish(ev: NostrEvent): Promise<void>;
   // try to reconnect to all relays
   reconnectAll(): void;
+  // dispose the relay pool
+  dispose(): void;
 };
 
 type TryPubResult =
@@ -129,6 +131,10 @@ class RxNostrRelayPool implements RelayPool {
     this.#relayUrls.map((rurl) => {
       this.#rxn.reconnect(rurl);
     });
+  }
+
+  dispose(): void {
+    this.#rxn.dispose();
   }
 }
 
@@ -401,14 +407,30 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     operationTimeoutMs: number,
   ): Promise<Nip46RemoteSigner> {
     const relayUrlsOrDefault = relayUrls ? relayUrls : defaultNip46Relays;
-    const relayPool = new RxNostrRelayPool(relayUrlsOrDefault);
-    const signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
-    await signer.#startRpcRespSubscription();
+
+    let relayPool: RelayPool | undefined;
+    try {
+      relayPool = new RxNostrRelayPool(relayUrlsOrDefault);
+    } catch (e) {
+      relayPool?.dispose();
+      throw e;
+    }
+
+    let signer: Nip46RemoteSigner | undefined;
+    try {
+      signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
+      signer.#startRpcRespSubscription();
     return signer;
+    } catch (e) {
+      signer?.dispose();
+      throw e;
+    }
   }
 
   /**
    * Initializes a NIP-46 remote signer handle, then performs a connection handshake.
+   *
+   * It's guaranteed that the signer handle and its internal relay pool are disposed in case of a connection handshake error.
    */
   static async #connect(
     localSigner: NostrSigner,
@@ -437,6 +459,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
         console.debug("ignoring 'Token already redeemed' error on connect from remote signer");
         return signer;
       }
+
+      signer.dispose();
       throw err;
     }
   }
@@ -649,6 +673,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       this.#closeSub?.();
       this.#closeSub = undefined;
     }
+    this.#relayPool.dispose();
     this.#inflightRpcs.clear();
   }
 
