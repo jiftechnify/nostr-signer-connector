@@ -298,13 +298,16 @@ const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"
  *
  * - `Nip46RemoteSigner.connectToRemote(connToken)`: "Started by the signer (nsecBunker)" discovery flow
  * - `Nip46RemoteSigner.listenConnectionFromRemote(relayUrls, clientMetadata)`: "Started by the client" discovery flow
+ *
+ * During an initialization process, a session to a remote signer is established. Session state data is returned as a result of the initialization, along with a Nip46RemoteSigner instance.
+ * Your app should store the session state data, and use it to resume the session later via `Nip46RemoteSigner.resumeSession(sessionState)`.
  */
 export class Nip46RemoteSigner implements NostrSigner, Disposable {
   #localSigner: NostrSigner;
   #remotePubkey: string;
 
   #relayPool: RelayPool;
-  #closeSub: (() => void) | undefined = undefined;
+  #closeRpcSub: (() => void) | undefined = undefined;
 
   #inflightRpcs: Map<string, Deferred<string>> = new Map();
   #opTimeoutMs: number;
@@ -348,7 +351,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
         this.#inflightRpcs.delete(rpcId);
       }
     };
-    this.#closeSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
+    this.#closeRpcSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
   }
 
   #startWaitingRpcResp(rpcId: string): { waitResp: Promise<string>; startCancelTimer: (timeoutMs: number) => void } {
@@ -477,7 +480,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * This is the "Started by the signer (nsecBunker)" signer discovery flow defined in NIP-46.
    *
    * Internally, it generates SecretKeySigner with a random secret key and use it to communicate with a remote signer.
-   * This secret key acts as a "session key", and it is returned along with other state data that identifies the session.
+   * This secret key acts as a "session key", and it is returned along with other session data (as `session` property).
+   * You should store the session state data (`session`) in somewhere to resume the session later via `Nip46RemoteSigner.resumeSession`.
    *
    * @returns a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
    */
@@ -500,7 +504,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * This is the "Started by the client" signer discovery flow defined in NIP-46.
    *
    * Internally, it generates SecretKeySigner with a random secret key and use it to communicate with a remote signer.
-   * This secret key acts as a "session key", and it is returned along with other state data that identifies the session.
+   * This secret key acts as a "session key", and it is returned along with other session data (as `session` property).
+   * You should store the session state data (`session`) in somewhere to resume the session later via `Nip46RemoteSigner.resumeSession`.
    *
    * @returns an object with following properties:
    *  - `connectUri`: a URI that can be shared with the remote signer to connect to this client
@@ -597,7 +602,6 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
         "abort",
         async () => {
           reject(Error("Nip46RemoteSigner.listenConnection: canceled"));
-          await delay(0);
           closeListenSub();
         },
         { once: true },
@@ -612,9 +616,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   }
 
   /**
-   * Resumes a session to a NIP-46 remote signer.
-   *
-   * Internally, it initializes NIP-46 remote signer whose `localSigner` is a SecretKeySigner with the given session key.
+   * Resumes a session to a NIP-46 remote signer, which is established by `Nip46RemoteSigner.connectToRemote` or `Nip46RemoteSigner.listenConnectionFromRemote`.
    */
   public static async resumeSession(
     { sessionKey, ...connParams }: Nip46SessionState,
@@ -675,15 +677,21 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     this.#relayPool.reconnectAll();
   }
 
+  /**
+   * Disposes this remote signer handle.
+   */
   public dispose() {
-    if (this.#closeSub !== undefined) {
-      this.#closeSub?.();
-      this.#closeSub = undefined;
+    if (this.#closeRpcSub !== undefined) {
+      this.#closeRpcSub?.();
+      this.#closeRpcSub = undefined;
     }
     this.#relayPool.dispose();
     this.#inflightRpcs.clear();
   }
 
+  /**
+   * Disposes this remote signer handle.
+   */
   public [Symbol.dispose]() {
     this.dispose();
   }
