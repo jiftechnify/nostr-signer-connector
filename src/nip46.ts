@@ -146,8 +146,8 @@ type Nip46RpcReq = {
 
 type Nip46RpcResp = {
   id: string;
-  result?: string;
-  error?: string;
+  result?: string | undefined | null;
+  error?: string | undefined | null;
 };
 
 type Nip46RpcSignatures = {
@@ -326,14 +326,13 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
           return;
         }
 
-        if (resp.error !== undefined && resp.error !== "") {
+        // there are cases that `error` and `result` both have values, so check error first
+        if (resp.error) {
           respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
-        } else {
-          if (resp.result) {
+        } else if (resp.result) {
             respWait.resolve(resp.result);
           } else {
             respWait.reject(new Error(`NIP-46 RPC: empty response`));
-          }
         }
       } catch (err) {
         console.error("error on receiving NIP-46 RPC response", err);
