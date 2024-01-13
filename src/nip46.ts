@@ -1,5 +1,6 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { type Filter, type Event as NostrEvent, type EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { RxNostr, createRxForwardReq, createRxNostr, uniq } from "rx-nostr";
+import { RxNostr, createRxForwardReq, createRxNostr, getPublicKey as getPubkeyFromHex, uniq } from "rx-nostr";
 import { parsePubkey } from "./helpers";
 import type { NostrSigner } from "./interface";
 import { SecretKeySigner } from "./secret_key";
@@ -27,13 +28,25 @@ class Deferred<T> {
 }
 
 type RelayPool = {
-  // starts to subscribe events
+  // start to subscribe events
   subscribe(filter: Filter, onEvent: (ev: NostrEvent) => void): () => void;
-  // publishes a Nostr event
-  publish(ev: NostrEvent): void;
+  // try to publish a Nostr event and wait for at least one OK response
+  publish(ev: NostrEvent): Promise<void>;
   // try to reconnect to all relays
   reconnectAll(): void;
 };
+
+type TryPubResult =
+  | {
+      status: "ok";
+    }
+  | {
+      status: "timeout";
+    }
+  | {
+      status: "error";
+      reason: string;
+    };
 
 class RxNostrRelayPool implements RelayPool {
   #rxn: RxNostr;
@@ -46,7 +59,7 @@ class RxNostrRelayPool implements RelayPool {
     rxn.setDefaultRelays(relayUrls);
 
     rxn.createConnectionStateObservable().subscribe(({ from: rurl, state }) => {
-      console.log(`[Nip46RemoteSigner] ${rurl}: connection state changed to ${state}`);
+      console.debug(`[Nip46RemoteSigner] ${rurl}: connection state changed to ${state}`);
     });
 
     this.#rxn = rxn;
@@ -63,8 +76,53 @@ class RxNostrRelayPool implements RelayPool {
     return () => sub.unsubscribe();
   }
 
-  publish(ev: NostrEvent): void {
-    this.#rxn.send(ev);
+  async publish(ev: NostrEvent): Promise<void> {
+    const maxRetry = 3;
+    let retry = 0;
+
+    while (true) {
+      if (retry === maxRetry) {
+        throw Error(`failed to publish: timed out multiple times and max retry count exceeded`);
+      }
+      const res = await this.#tryPub(ev, 3000);
+      switch (res.status) {
+        case "ok":
+          return;
+
+        case "error":
+          throw Error(`failed to publish event: ${res.reason}`);
+
+        case "timeout":
+          await delay((1 << retry) * 1000);
+          retry++;
+      }
+    }
+  }
+
+  // try to publish event, and wait for at least one OK response
+  async #tryPub(ev: NostrEvent, timeoutMs: number): Promise<TryPubResult> {
+    return new Promise<TryPubResult>((resolve) => {
+      try {
+        const timeoutSig = AbortSignal.timeout(timeoutMs);
+        timeoutSig.addEventListener("abort", () => {
+          okSub.unsubscribe();
+          resolve({ status: "timeout" });
+        });
+        const okSub = this.#rxn.send(ev).subscribe(({ ok, notice }) => {
+          if (ok) {
+            resolve({ status: "ok" });
+          } else {
+            resolve({ status: "error", reason: notice ?? "(empty reason)" });
+          }
+        });
+      } catch (err) {
+        if (err instanceof Error) {
+          resolve({ status: "error", reason: err.message });
+        } else {
+          resolve({ status: "error", reason: "(unknown error)" });
+        }
+      }
+    });
   }
 
   reconnectAll(): void {
@@ -136,13 +194,13 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   nip04_decrypt: identity,
 };
 
-type Nip46ConnectionParams = {
+export type Nip46ConnectionParams = {
   remotePubkey: string;
   secretToken?: string | undefined;
   relayUrls?: string[] | undefined;
 };
 
-const parseNip46ConnectionToken = (token: string): Nip46ConnectionParams => {
+const parseConnToken = (token: string): Nip46ConnectionParams => {
   let parts: {
     pubkey: string;
     secret?: string;
@@ -185,7 +243,10 @@ const parseNip46ConnectionToken = (token: string): Nip46ConnectionParams => {
     throw Error("connection token contains invalid pubkey");
   }
 
-  const relayUrls = parts.relays?.replace("relay=", "").split("&relay=");
+  const relayUrls = parts.relays
+    ?.replace("relay=", "")
+    .split("&relay=")
+    .map((r) => decodeURIComponent(r));
   try {
     relayUrls?.forEach((r) => new URL(r));
   } catch {
@@ -198,6 +259,24 @@ const parseNip46ConnectionToken = (token: string): Nip46ConnectionParams => {
     relayUrls,
   };
 };
+
+export type Nip46SessionState = Nip46ConnectionParams & {
+  sessionKey: string;
+};
+
+type StartSessionResult = {
+  /**
+   * A handle for the connected NIP-46 remote signer.
+   */
+  signer: Nip46RemoteSigner;
+
+  /**
+   * State data needed to resume a session to the NIP-46 remote signer later.
+   */
+  session: Nip46SessionState;
+};
+
+export type Nip46ClientMetadata = { name: string; url?: string; description?: string; icons?: string[] };
 
 const generateRpcId = () => Math.random().toString(32).substring(2, 8);
 
@@ -241,7 +320,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
           return;
         }
 
-        if (resp.error !== undefined) {
+        if (resp.error !== undefined && resp.error !== "") {
           respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
         } else {
           if (resp.result) {
@@ -261,20 +340,23 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     this.#closeSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
   }
 
-  #startWaitingRpcResp(rpcId: string, timeoutMs: number): Deferred<string> {
+  #startWaitingRpcResp(rpcId: string): { waitResp: Promise<string>; startCancelTimer: (timeoutMs: number) => void } {
     const d = new Deferred<string>();
     this.#inflightRpcs.set(rpcId, d);
 
-    const signal = AbortSignal.timeout(timeoutMs);
-    signal.addEventListener(
-      "abort",
-      () => {
-        d.reject(new Error("NIP-46 RPC timed out!"));
-        this.#inflightRpcs.delete(rpcId);
-      },
-      { once: true },
-    );
-    return d;
+    const startCancelTimer = (timeoutMs: number) => {
+      const signal = AbortSignal.timeout(timeoutMs);
+      signal.addEventListener(
+        "abort",
+        () => {
+          d.reject(new Error("NIP-46 RPC timed out!"));
+          this.#inflightRpcs.delete(rpcId);
+        },
+        { once: true },
+      );
+    };
+
+    return { waitResp: d.promise, startCancelTimer };
   }
 
   async #requestNip46Rpc<M extends Nip46RpcMethods>(
@@ -283,7 +365,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     timeoutMs: number,
   ): Promise<Nip46RpcResult<M>> {
     const rpcId = generateRpcId();
-    const respWaiter = this.#startWaitingRpcResp(rpcId, timeoutMs);
+    const { waitResp, startCancelTimer } = this.#startWaitingRpcResp(rpcId);
 
     const rpcReq: Nip46RpcReq = {
       id: rpcId,
@@ -298,26 +380,42 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       created_at: currentUnixtimeSec(),
     };
     const signedReqEv = await this.#localSigner.signEvent(reqEv);
-    this.#relayPool.publish(signedReqEv);
 
-    // rethrows if RPC result in error.
-    const rawResp = await respWaiter.promise;
+    await this.#relayPool.publish(signedReqEv);
+
+    // once the request is sent, start a timer to cancel the request if it takes too long
+    startCancelTimer(timeoutMs);
+
+    // rethrow if RPC result in error.
+    const rawResp = await waitResp;
     return nip46RpcResultDecoders[method](rawResp);
   }
 
   /**
-   * Connects to a NIP-46 remote signer with raw connection parameters.
+   * Creates a NIP-46 remote signer handle with RPC response subscription started.
    */
-  public static async connectWithParams(
+  static async #init(
+    localSigner: NostrSigner,
+    remotePubkey: string,
+    relayUrls: string[] | undefined,
+    operationTimeoutMs: number,
+  ): Promise<Nip46RemoteSigner> {
+    const relayUrlsOrDefault = relayUrls ? relayUrls : defaultNip46Relays;
+    const relayPool = new RxNostrRelayPool(relayUrlsOrDefault);
+    const signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
+    await signer.#startRpcRespSubscription();
+    return signer;
+  }
+
+  /**
+   * Initializes a NIP-46 remote signer handle, then performs a connection handshake.
+   */
+  static async #connect(
     localSigner: NostrSigner,
     { remotePubkey, secretToken, relayUrls }: Nip46ConnectionParams,
     operationTimeoutMs: number,
   ): Promise<Nip46RemoteSigner> {
-    const finalRelayUrls = relayUrls ? relayUrls : defaultNip46Relays;
-    const relayPool = new RxNostrRelayPool(finalRelayUrls);
-
-    const signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
-    await signer.#startRpcRespSubscription();
+    const signer = await Nip46RemoteSigner.#init(localSigner, remotePubkey, relayUrls, operationTimeoutMs);
 
     // perform connection handshake
     try {
@@ -336,7 +434,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       // HACK: nsecBunker returns error if you connect twice to it with the same token. However, in spite of the error, other methods still work with the token.
       // It seems that Coracle just ignores this error on connect, and we follow the behavior here.
       if (err instanceof Error && err.message.includes("Token already redeemed")) {
-        console.log("ignoring 'Token already redeemed' error on connect from remote signer");
+        console.debug("ignoring 'Token already redeemed' error on connect from remote signer");
         return signer;
       }
       throw err;
@@ -344,59 +442,155 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   }
 
   /**
-   * Connects to a NIP-46 remote signer with connection token and returns a handle for the remote signer if succeeds.
-   *
-   * The NostrSigner given as `localSigner` is used for encrypting a RPC request payload, sigining a RPC request event (kind: 24133) and decrypting a RPC response payload.
-   *
-   * If the given connection token doesn't have relays part, default relays used by nsecbunkerd are used for RPC communications.
-   */
-  public static async connect(
-    localSigner: NostrSigner,
-    connToken: string,
-    operationTimeoutMs = 15 * 1000,
-  ): Promise<Nip46RemoteSigner> {
-    try {
-      const connParams = parseNip46ConnectionToken(connToken);
-      return Nip46RemoteSigner.connectWithParams(localSigner, connParams, operationTimeoutMs);
-    } catch {
-      throw Error("given NIP-46 connection token is invalid");
-    }
-  }
-
-  /**
-   * Starts a "session" to a NIP-46 remote signer.
+   * Starts a session to a NIP-46 remote signer with a connection token.
+   * This is the "Started by the signer (nsecBunker)" signer discovery flow defined in NIP-46.
    *
    * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with a random secret key.
-   * The secret key in the `localSigner` acts as a "session key", and it is returned along with a handle for the remote signer.
+   * The secret key in the `localSigner` acts as a "session key".
+   *
+   * @returns a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
    */
-  public static async startSession(
-    connToken: string,
-    operationTimeoutMs = 15 * 1000,
-  ): Promise<{
-    sessionKey: string;
-    signer: Nip46RemoteSigner;
-  }> {
+  public static async startSession(connToken: string, operationTimeoutMs = 15 * 1000): Promise<StartSessionResult> {
+    const connParams = parseConnToken(connToken);
     const localSigner = SecretKeySigner.withRandomKey();
     const sessionKey = localSigner.secretKey;
 
     return {
-      sessionKey,
-      signer: await Nip46RemoteSigner.connect(localSigner, connToken, operationTimeoutMs),
+      signer: await Nip46RemoteSigner.#connect(localSigner, connParams, operationTimeoutMs),
+      session: {
+        sessionKey,
+        ...connParams,
+      },
     };
   }
 
   /**
-   * Resumes a "session" to a NIP-46 remote signer.
+   * Starts to listen connection request from a NIP-46 remote signer.
+   * This is the "Started by the client" signer discovery flow defined in NIP-46.
    *
-   * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with the given session key.
+   * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with a random secret key.
+   * The secret key in the `localSigner` acts as a "session key".
+   *
+   * @returns an object with following properties:
+   *  - `connectUri`: a URI that can be shared with the remote signer to connect to this client
+   *  - `established`: a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
+   *  - `cancel`: a function that cancels listening connection from a remote signer
+   */
+  public static listenConnection(
+    relayUrls: string[],
+    metadata: Nip46ClientMetadata,
+    operationTimeoutMs = 15 * 1000,
+  ): {
+    connectUri: string;
+    established: Promise<StartSessionResult>;
+    cancel: () => void;
+  } {
+    const localSigner = SecretKeySigner.withRandomKey();
+    const sessionKey = localSigner.secretKey;
+    const localPubkey = getPubkeyFromHex(sessionKey);
+
+    // construct nostrconnect URI
+    const connUri = new URL(`nostrconnect://${localPubkey}`);
+    for (const rurl of relayUrls) {
+      connUri.searchParams.append("relay", rurl);
+    }
+    connUri.searchParams.append("metadata", JSON.stringify(metadata));
+
+    const ac = new AbortController();
+    const cancel = () => ac.abort();
+
+    // a promise that is resolved once a 'connect' request from a remote signer is received
+    const established = new Promise<StartSessionResult>((resolve, reject) => {
+      const relayPool = new RxNostrRelayPool(relayUrls);
+
+      const onevent = async (ev: NostrEvent) => {
+        try {
+          const signerPubkey = ev.pubkey;
+          const plainContent = await localSigner.nip04Decrypt(signerPubkey, ev.content);
+          const req = JSON.parse(plainContent) as Nip46RpcReq;
+          if (req.method !== "connect") {
+            console.warn("ignoring request other than 'connect'");
+            return;
+          }
+          if (req.params.length <= 0) {
+            console.warn("ignoring 'connect' request with empty params");
+            return;
+          }
+          const paramPubkey = parsePubkey(req.params[0] as string);
+          if (paramPubkey === undefined || signerPubkey !== paramPubkey) {
+            console.warn("ignoring 'connect' request with invalid pubkey");
+            return;
+          }
+
+          const resp: Nip46RpcResp = {
+            id: req.id,
+            result: "ack",
+            error: "",
+          };
+          const cipheredResp = await localSigner.nip04Encrypt(signerPubkey, JSON.stringify(resp));
+          const respEv: NostrEventTemplate = {
+            kind: 24133,
+            tags: [["p", signerPubkey]],
+            content: cipheredResp,
+            created_at: currentUnixtimeSec(),
+          };
+          const signedResp = await localSigner.signEvent(respEv);
+
+          await relayPool.publish(signedResp);
+
+          // session established!
+          // close subscription for listening 'connect' from remote
+          closeListenSub();
+
+          // create a signer handle and start subscription for RPC resp
+          const signer = new Nip46RemoteSigner(localSigner, signerPubkey, relayPool, operationTimeoutMs);
+          signer.#startRpcRespSubscription();
+          resolve({
+            signer,
+            session: {
+              sessionKey,
+              remotePubkey: signerPubkey,
+              relayUrls,
+            },
+          });
+        } catch (err) {
+          console.error("error on accepting connect request from remote signer", err);
+        }
+      };
+
+      // start to listen connect request
+      const closeListenSub = relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
+
+      // cancel listening connection
+      ac.signal.addEventListener(
+        "abort",
+        async () => {
+          reject(Error("Nip46RemoteSigner.listenConnection: canceled"));
+          await delay(0);
+          closeListenSub();
+        },
+        { once: true },
+      );
+    });
+
+    return {
+      connectUri: connUri.toString(),
+      established,
+      cancel,
+    };
+  }
+
+  /**
+   * Resumes a session to a NIP-46 remote signer.
+   *
+   * Internally, it initializes NIP-46 remote signer whose `localSigner` is a SecretKeySigner with the given session key.
    */
   public static async resumeSession(
-    sessionKey: string,
-    connToken: string,
+    { sessionKey, ...connParams }: Nip46SessionState,
     operationTimeoutMs = 15 * 1000,
   ): Promise<Nip46RemoteSigner> {
     const localSigner = new SecretKeySigner(sessionKey);
-    return Nip46RemoteSigner.connect(localSigner, connToken, operationTimeoutMs);
+    return Nip46RemoteSigner.#init(localSigner, connParams.remotePubkey, connParams.relayUrls, operationTimeoutMs);
   }
 
   /**
