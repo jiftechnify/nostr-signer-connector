@@ -292,6 +292,12 @@ const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"
 
 /**
  * An implementation of NostrSigner based on a [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer (a.k.a. Nostr Connect or nsecBunker).
+ * It acts as a client-side handle for a NIP-46 remote signer.
+ *
+ * You can initialize a Nip46RemoteSigner instance by calling one of the following initialization methods, each corresponds to a signer discovery flow defined in NIP-46:
+ *
+ * - `Nip46RemoteSigner.connectToRemote(connToken)`: "Started by the signer (nsecBunker)" discovery flow
+ * - `Nip46RemoteSigner.listenConnectionFromRemote(relayUrls, clientMetadata)`: "Started by the client" discovery flow
  */
 export class Nip46RemoteSigner implements NostrSigner, Disposable {
   #localSigner: NostrSigner;
@@ -330,9 +336,9 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
         if (resp.error) {
           respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
         } else if (resp.result) {
-            respWait.resolve(resp.result);
-          } else {
-            respWait.reject(new Error(`NIP-46 RPC: empty response`));
+          respWait.resolve(resp.result);
+        } else {
+          respWait.reject(new Error(`NIP-46 RPC: empty response`));
         }
       } catch (err) {
         console.error("error on receiving NIP-46 RPC response", err);
@@ -398,6 +404,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
 
   /**
    * Creates a NIP-46 remote signer handle with RPC response subscription started.
+   *
+   * It's guaranteed that the signer handle and its internal relay pool are disposed in case of an initialization error.
    */
   static async #init(
     localSigner: NostrSigner,
@@ -419,7 +427,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     try {
       signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
       signer.#startRpcRespSubscription();
-    return signer;
+      return signer;
     } catch (e) {
       signer?.dispose();
       throw e;
@@ -465,15 +473,15 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   }
 
   /**
-   * Starts a session to a NIP-46 remote signer with a connection token.
+   * Connects to a NIP-46 remote signer with a given connection token, and establishes a session to the remote signer.
    * This is the "Started by the signer (nsecBunker)" signer discovery flow defined in NIP-46.
    *
-   * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with a random secret key.
-   * The secret key in the `localSigner` acts as a "session key".
+   * Internally, it generates SecretKeySigner with a random secret key and use it to communicate with a remote signer.
+   * This secret key acts as a "session key", and it is returned along with other state data that identifies the session.
    *
    * @returns a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
    */
-  public static async startSession(connToken: string, operationTimeoutMs = 15 * 1000): Promise<StartSessionResult> {
+  public static async connectToRemote(connToken: string, operationTimeoutMs = 15 * 1000): Promise<StartSessionResult> {
     const connParams = parseConnToken(connToken);
     const localSigner = SecretKeySigner.withRandomKey();
     const sessionKey = localSigner.secretKey;
@@ -488,20 +496,20 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   }
 
   /**
-   * Starts to listen connection request from a NIP-46 remote signer.
+   * Starts to listen a connection request from a NIP-46 remote signer, and once a connection request is received, establishes a session to the remote signer.
    * This is the "Started by the client" signer discovery flow defined in NIP-46.
    *
-   * Internally, it connects to a NIP-46 remote signer whose `localSigner` is a SecretKeySigner with a random secret key.
-   * The secret key in the `localSigner` acts as a "session key".
+   * Internally, it generates SecretKeySigner with a random secret key and use it to communicate with a remote signer.
+   * This secret key acts as a "session key", and it is returned along with other state data that identifies the session.
    *
    * @returns an object with following properties:
    *  - `connectUri`: a URI that can be shared with the remote signer to connect to this client
    *  - `established`: a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
    *  - `cancel`: a function that cancels listening connection from a remote signer
    */
-  public static listenConnection(
+  public static listenConnectionFromRemote(
     relayUrls: string[],
-    metadata: Nip46ClientMetadata,
+    clientMetadata: Nip46ClientMetadata,
     operationTimeoutMs = 15 * 1000,
   ): {
     connectUri: string;
@@ -517,7 +525,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     for (const rurl of relayUrls) {
       connUri.searchParams.append("relay", rurl);
     }
-    connUri.searchParams.append("metadata", JSON.stringify(metadata));
+    connUri.searchParams.append("metadata", JSON.stringify(clientMetadata));
 
     const ac = new AbortController();
     const cancel = () => ac.abort();
