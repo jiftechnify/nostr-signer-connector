@@ -8,7 +8,7 @@ Currently this library supports 3 types of Nostr event signers:
 - [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer a.k.a. Nostr Connect / [nsecBunker](https://nsecbunker.com/) (`Nip46RemoteSigner`)
     + Both "Started by the signer (nsecBunker)" and "Started by the client" signer discovery flows are supported!
 
-With this, you can support "Login with nsecBunker" feature in your Nostr app without relying on [NDK](https://github.com/nostr-dev-kit/ndk)! If you curious about it, [read `Nip46RemoteSigner` usage](#nip46remotesigner).
+As a bonus, with this library, **you can support "Login with nsecBunker" feature in your Nostr app without relying on [NDK](https://github.com/nostr-dev-kit/ndk)**! If you curious about it, [read `Nip46RemoteSigner` usage](#nip46remotesigner).
 
 ## Installation
 ```
@@ -83,11 +83,11 @@ const ev = await signer.signEvent({...});
 
 It starts to listen a connection request from a remote signer, and establishes a session to the remote signer once a connection request is received.
 
-First of all, it gererates a connect URI (`nostrconnect://...`) which allows a remote signer to send connect request to your app.
+First of all, it generates a connect URI (`nostrconnect://...`) which allows a remote signer to send connect request to your app.
 You should show the URI to users in some way, and instruct them to paste it on their remote signer.
 
 You can wait until a session is established by `await`-ing on `established` property in the return value.
-This promise resolves to an object that have session data (`session`) along with a handle to the nsecBunker (`signer`).
+This promise resolves to an object that have session data (`session`) along with a handle to the remote signer (`signer`).
 **You should store this session data in somewhere** to resume the session later (e.g. after a browser reload).
 
 You can cancel listening a connection from remote signer by calling `cancel` function in the return value.
