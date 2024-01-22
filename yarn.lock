@@ -229,20 +229,6 @@
   resolved "https://registry.yarnpkg.com/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.4.15.tgz#d7c6e6755c78567a951e04ab52ef0fd26de59f32"
   integrity sha512-eF2rxCRulEKXHTRiDrDy6erMYWqNw4LPdQ8UQA4huuxaQsVeRPFl2oM8oDGxMFhJUWZf9McpLtJasDDZb/Bpeg==
 
-"@lerna-lite/cli@3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@lerna-lite/cli/-/cli-3.2.0.tgz#9f5c68e741a380ee15f8ea6279f265c9c158e447"
-  integrity sha512-ypPr++CSCeKbmKI1X9ATqwtHxZFqUMO1+Ruzhu2rysZ7QMj4GzitUWsDnPhu6O2mHzGt4T2H49Q9kBHZgoszKw==
-  dependencies:
-    "@lerna-lite/core" "3.2.0"
-    "@lerna-lite/init" "3.2.0"
-    dedent "^1.5.1"
-    dotenv "^16.3.1"
-    import-local "^3.1.0"
-    load-json-file "^7.0.1"
-    npmlog "^7.0.1"
-    yargs "^17.7.2"
-
 "@lerna-lite/cli@3.2.1", "@lerna-lite/cli@^3.2.0":
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/@lerna-lite/cli/-/cli-3.2.1.tgz#d4bc5286e5d5520d9c5eb9fe538d218a9c9083d3"
@@ -256,38 +242,6 @@
     load-json-file "^7.0.1"
     npmlog "^7.0.1"
     yargs "^17.7.2"
-
-"@lerna-lite/core@3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@lerna-lite/core/-/core-3.2.0.tgz#032dbebb0aaba65001a792f05a1cb7290351aa60"
-  integrity sha512-45xUQh//wv+wjRa/IUE09HtdoYsIr5Fy6NFZql/1VAdNsP1hBf7gC/igezjzgSqo4KoH1sn4KdV9eycJrnCBQg==
-  dependencies:
-    "@npmcli/run-script" "^7.0.3"
-    chalk "^5.3.0"
-    clone-deep "^4.0.1"
-    config-chain "^1.1.13"
-    cosmiconfig "^9.0.0"
-    dedent "^1.5.1"
-    execa "^8.0.1"
-    fs-extra "^11.2.0"
-    glob-parent "^6.0.2"
-    globby "^14.0.0"
-    inquirer "^9.2.12"
-    is-ci "^3.0.1"
-    json5 "^2.2.3"
-    load-json-file "^7.0.1"
-    minimatch "^9.0.3"
-    npm-package-arg "^11.0.1"
-    npmlog "^7.0.1"
-    p-map "^7.0.1"
-    p-queue "^8.0.1"
-    resolve-from "^5.0.0"
-    semver "^7.5.4"
-    slash "^5.1.0"
-    strong-log-transformer "^2.1.0"
-    write-file-atomic "^5.0.1"
-    write-json-file "^5.0.0"
-    write-pkg "^6.0.1"
 
 "@lerna-lite/core@3.2.1":
   version "3.2.1"
@@ -321,16 +275,6 @@
     write-json-file "^5.0.0"
     write-pkg "^6.0.1"
 
-"@lerna-lite/init@3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@lerna-lite/init/-/init-3.2.0.tgz#d857f186741298ea4185f8485d113e0f911e45df"
-  integrity sha512-6RuesqWxvZdmEEISfUkit4ug4PuQgc6x8Sw9ta13+5Af7o7XQqx64SErkTCfzh9t6ZqRcDqzuGkGM4bR0r34Lw==
-  dependencies:
-    "@lerna-lite/core" "3.2.0"
-    fs-extra "^11.2.0"
-    p-map "^7.0.1"
-    write-json-file "^5.0.0"
-
 "@lerna-lite/init@3.2.1":
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/@lerna-lite/init/-/init-3.2.1.tgz#e5b8880c7978495b5851a2a15244bf6dd9fa1e84"
@@ -342,14 +286,14 @@
     write-json-file "^5.0.0"
 
 "@lerna-lite/publish@^3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@lerna-lite/publish/-/publish-3.2.0.tgz#4ef3f41715e8a57a743b016fa0a878d06da86c05"
-  integrity sha512-sZ2VyZSJzcdvYnWh8j686679dntEUtb9sBl7RpIIpthOjyLFqSwyi5zf5ox/+QteGsuOQcCUVwfRYiUKzQMWBA==
+  version "3.2.1"
+  resolved "https://registry.yarnpkg.com/@lerna-lite/publish/-/publish-3.2.1.tgz#d30c098d225f19036d5ac1a53665b379236c59fc"
+  integrity sha512-a9xE0OV6NeM0l+9rKrkmDeDyNg051QKY4a9zJAaiUJKbdn54z6WvHdaq8PUzM627Fg6cTxYdXtP1elodXGPxmA==
   dependencies:
-    "@lerna-lite/cli" "3.2.0"
-    "@lerna-lite/core" "3.2.0"
-    "@lerna-lite/version" "3.2.0"
-    "@npmcli/arborist" "^7.2.2"
+    "@lerna-lite/cli" "3.2.1"
+    "@lerna-lite/core" "3.2.1"
+    "@lerna-lite/version" "3.2.1"
+    "@npmcli/arborist" "^7.3.0"
     byte-size "^8.1.1"
     chalk "^5.3.0"
     columnify "^1.6.0"
@@ -360,7 +304,7 @@
     libnpmpublish "^9.0.3"
     normalize-path "^3.0.0"
     npm-package-arg "^11.0.1"
-    npm-packlist "^8.0.1"
+    npm-packlist "^8.0.2"
     npm-registry-fetch "^16.1.0"
     npmlog "^7.0.1"
     p-map "^7.0.1"
@@ -373,45 +317,7 @@
     tar "^6.2.0"
     temp-dir "^3.0.0"
 
-"@lerna-lite/version@3.2.0":
-  version "3.2.0"
-  resolved "https://registry.yarnpkg.com/@lerna-lite/version/-/version-3.2.0.tgz#65c676e61d7d3502a467560e6eaa475394d98c2c"
-  integrity sha512-1kR4xOZ5UsDnJ+TMrxqIZ7KriJcCZ252Gbv6hHHNDQPWjPqzQVA4JCqDyjNczOZZgQSead4DEqn5dZklV+ktbA==
-  dependencies:
-    "@lerna-lite/cli" "3.2.0"
-    "@lerna-lite/core" "3.2.0"
-    "@octokit/plugin-enterprise-rest" "^6.0.1"
-    "@octokit/rest" "^20.0.2"
-    chalk "^5.3.0"
-    conventional-changelog-angular "^7.0.0"
-    conventional-changelog-core "^7.0.0"
-    conventional-changelog-writer "^7.0.1"
-    conventional-commits-parser "^5.0.0"
-    conventional-recommended-bump "^9.0.0"
-    dedent "^1.5.1"
-    fs-extra "^11.2.0"
-    get-stream "^8.0.1"
-    git-url-parse "^14.0.0"
-    graceful-fs "^4.2.11"
-    is-stream "^3.0.0"
-    load-json-file "^7.0.1"
-    make-dir "^4.0.0"
-    minimatch "^9.0.3"
-    new-github-release-url "^2.0.0"
-    node-fetch "^3.3.2"
-    npm-package-arg "^11.0.1"
-    npmlog "^7.0.1"
-    p-map "^7.0.1"
-    p-pipe "^4.0.0"
-    p-reduce "^3.0.0"
-    pify "^6.1.0"
-    semver "^7.5.4"
-    slash "^5.1.0"
-    temp-dir "^3.0.0"
-    uuid "^9.0.1"
-    write-json-file "^5.0.0"
-
-"@lerna-lite/version@^3.2.0":
+"@lerna-lite/version@3.2.1", "@lerna-lite/version@^3.2.0":
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/@lerna-lite/version/-/version-3.2.1.tgz#15cbe4c5070eaed5f2b1a7e13883ff56805b1f5f"
   integrity sha512-cMXSTOjAQgtsUCPLXna/Uflxbmppkgxa9yulwCnUGsEZP0G8DfvQAaIpb1QOgxy49mFzPpcw51VDt4zfcF0MHA==
@@ -529,10 +435,10 @@
     lru-cache "^10.0.1"
     socks-proxy-agent "^8.0.1"
 
-"@npmcli/arborist@^7.2.2":
-  version "7.2.2"
-  resolved "https://registry.yarnpkg.com/@npmcli/arborist/-/arborist-7.2.2.tgz#b1de598b4b4aaf3e05460c0b94565d1966b5f5ed"
-  integrity sha512-dIIzyhy1zS2dYPS8bdM/8qA8W2evQE9KENBxVOhFthm/2RKqf2ninRWQc8xfc5f1gsiTxTP20Y9flIfziHfSKA==
+"@npmcli/arborist@^7.3.0":
+  version "7.3.0"
+  resolved "https://registry.yarnpkg.com/@npmcli/arborist/-/arborist-7.3.0.tgz#ca716707053daf63bc320a917bfe317fca7b4dc6"
+  integrity sha512-ZElIE9L14fEYiL4KqgqRHmo8fRKiTSOFU3hVS1mNm0zJE7hu4FHmof+OFsA7fAAXfkNDJrDByvD0o7Le0ISHMw==
   dependencies:
     "@isaacs/string-locale-compare" "^1.1.0"
     "@npmcli/fs" "^3.1.0"
@@ -3521,10 +3427,10 @@ npm-package-arg@^11.0.0, npm-package-arg@^11.0.1:
     semver "^7.3.5"
     validate-npm-package-name "^5.0.0"
 
-npm-packlist@^8.0.0, npm-packlist@^8.0.1:
-  version "8.0.1"
-  resolved "https://registry.yarnpkg.com/npm-packlist/-/npm-packlist-8.0.1.tgz#97d1eb2a9a90e10ce1b028d058da3740c91b89ab"
-  integrity sha512-MQpL27ZrsJQ2kiAuQPpZb5LtJwydNRnI15QWXsf3WHERu4rzjRj6Zju/My2fov7tLuu3Gle/uoIX/DDZ3u4O4Q==
+npm-packlist@^8.0.0, npm-packlist@^8.0.2:
+  version "8.0.2"
+  resolved "https://registry.yarnpkg.com/npm-packlist/-/npm-packlist-8.0.2.tgz#5b8d1d906d96d21c85ebbeed2cf54147477c8478"
+  integrity sha512-shYrPFIS/JLP4oQmAwDyk5HcyysKW8/JLTEA32S0Z5TzvpaeeX2yMFfoK1fjEBnCBvVyIB/Jj/GBFdm0wsgzbA==
   dependencies:
     ignore-walk "^6.0.4"
 
