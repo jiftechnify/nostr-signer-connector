@@ -243,7 +243,7 @@
     npmlog "^7.0.1"
     yargs "^17.7.2"
 
-"@lerna-lite/cli@^3.2.0":
+"@lerna-lite/cli@3.2.1", "@lerna-lite/cli@^3.2.0":
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/@lerna-lite/cli/-/cli-3.2.1.tgz#d4bc5286e5d5520d9c5eb9fe538d218a9c9083d3"
   integrity sha512-aF7lfe+TOmL+YxaKgJcHCfFT/nZ3ZI+icZTEVM80LaEIhVvgBJZSqabGFu1PbQ9onvBdKX2/FYaWhJz+fO7cIQ==
@@ -373,13 +373,51 @@
     tar "^6.2.0"
     temp-dir "^3.0.0"
 
-"@lerna-lite/version@3.2.0", "@lerna-lite/version@^3.2.0":
+"@lerna-lite/version@3.2.0":
   version "3.2.0"
   resolved "https://registry.yarnpkg.com/@lerna-lite/version/-/version-3.2.0.tgz#65c676e61d7d3502a467560e6eaa475394d98c2c"
   integrity sha512-1kR4xOZ5UsDnJ+TMrxqIZ7KriJcCZ252Gbv6hHHNDQPWjPqzQVA4JCqDyjNczOZZgQSead4DEqn5dZklV+ktbA==
   dependencies:
     "@lerna-lite/cli" "3.2.0"
     "@lerna-lite/core" "3.2.0"
+    "@octokit/plugin-enterprise-rest" "^6.0.1"
+    "@octokit/rest" "^20.0.2"
+    chalk "^5.3.0"
+    conventional-changelog-angular "^7.0.0"
+    conventional-changelog-core "^7.0.0"
+    conventional-changelog-writer "^7.0.1"
+    conventional-commits-parser "^5.0.0"
+    conventional-recommended-bump "^9.0.0"
+    dedent "^1.5.1"
+    fs-extra "^11.2.0"
+    get-stream "^8.0.1"
+    git-url-parse "^14.0.0"
+    graceful-fs "^4.2.11"
+    is-stream "^3.0.0"
+    load-json-file "^7.0.1"
+    make-dir "^4.0.0"
+    minimatch "^9.0.3"
+    new-github-release-url "^2.0.0"
+    node-fetch "^3.3.2"
+    npm-package-arg "^11.0.1"
+    npmlog "^7.0.1"
+    p-map "^7.0.1"
+    p-pipe "^4.0.0"
+    p-reduce "^3.0.0"
+    pify "^6.1.0"
+    semver "^7.5.4"
+    slash "^5.1.0"
+    temp-dir "^3.0.0"
+    uuid "^9.0.1"
+    write-json-file "^5.0.0"
+
+"@lerna-lite/version@^3.2.0":
+  version "3.2.1"
+  resolved "https://registry.yarnpkg.com/@lerna-lite/version/-/version-3.2.1.tgz#15cbe4c5070eaed5f2b1a7e13883ff56805b1f5f"
+  integrity sha512-cMXSTOjAQgtsUCPLXna/Uflxbmppkgxa9yulwCnUGsEZP0G8DfvQAaIpb1QOgxy49mFzPpcw51VDt4zfcF0MHA==
+  dependencies:
+    "@lerna-lite/cli" "3.2.1"
+    "@lerna-lite/core" "3.2.1"
     "@octokit/plugin-enterprise-rest" "^6.0.1"
     "@octokit/rest" "^20.0.2"
     chalk "^5.3.0"
