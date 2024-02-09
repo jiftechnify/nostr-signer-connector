@@ -22,7 +22,7 @@ export const parseSecKey = (secKey: string): { hex: string; bytes: Uint8Array } 
   return undefined;
 };
 
-// parse the given public key of any string format (hex/bech32)
+// parse the given public key of any string format (hex/bech32) as hex
 // returns undefined if the input is invalid
 export const parsePubkey = (pubkey: string): string | undefined => {
   if (pubkey.startsWith("npub1")) {
