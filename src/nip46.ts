@@ -206,7 +206,7 @@ export type Nip46ConnectionParams = {
   relayUrls: string[];
 };
 
-const parseConnToken = (token: string): Nip46ConnectionParams => {
+export const parseConnToken = (token: string): Nip46ConnectionParams => {
   const isUriFormat = token.startsWith("bunker://");
   return isUriFormat ? parseUriConnToken(token) : parseLegacyConnToken(token);
 };
