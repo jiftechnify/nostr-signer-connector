@@ -22,13 +22,13 @@ jobs:
           node-version: ${{ matrix.node }}
 
       - name: Install dependencies
-        run: yarn install
+        run: npm run install
 
       - name: Lint
-        run: yarn lint
+        run: npm run lint
 
-      - name : Test
-        run: yarn test
+      - name: Test
+        run: npm run test
 
   typos:
     name: Detect typos
