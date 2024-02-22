@@ -65,12 +65,12 @@ describe("parseConnToken", () => {
     });
     test("URL token: invalid pubkey", () => {
       expect(() => {
-        parseConnToken(`bunker://hoge`);
+        parseConnToken("bunker://hoge");
       }).toThrowError();
     });
     test("legacy token: invalid pubkey", () => {
       expect(() => {
-        parseConnToken(`hoge#123456`);
+        parseConnToken("hoge#123456");
       }).toThrowError();
     });
   });

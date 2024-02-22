@@ -10,10 +10,7 @@
     "require": "./dist/index.cjs",
     "types": "./dist/index.d.ts"
   },
-  "files": [
-    "dist",
-    "src"
-  ],
+  "files": ["dist", "src"],
   "repository": "ssh://git@github.com/jiftechnify/nostr-signer-connector.git",
   "author": "jiftechnify <jiftech.stlfy@gmail.com>",
   "license": "MIT",
@@ -21,11 +18,11 @@
     "prepack": "npm run build",
     "tsc": "tsc",
     "lint": "run-p tsc lint:*",
-    "lint:format": "prettier --check --log-level warn src/**/*.ts",
-    "lint:js": "eslint --max-warnings 0 src/",
+    "lint:format": "biome format ./src",
+    "lint:js": "biome lint ./src",
     "fix": "run-s fix:*",
-    "fix:format": "prettier --write --log-level warn src/**/*.ts",
-    "fix:js": "eslint --fix src/",
+    "fix:format": "biome format --write ./src",
+    "fix:js": "biome lint --apply ./src",
     "test": "vitest run",
     "build": "node build.js",
     "bump-version": "lerna version",
@@ -37,6 +34,7 @@
     "rx-nostr": "^2.4.1"
   },
   "devDependencies": {
+    "@biomejs/biome": "1.5.3",
     "@lerna-lite/cli": "^3.2.0",
     "@lerna-lite/publish": "^3.2.0",
     "@lerna-lite/version": "^3.2.0",
@@ -56,8 +54,5 @@
     "vitest": "^1.1.0",
     "vitest-websocket-mock": "^0.3.0",
     "websocket-polyfill": "^0.0.3"
-  },
-  "prettier": {
-    "printWidth": 120
   }
 }

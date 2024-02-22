@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { type Filter, type Event as NostrEvent, type EventTemplate as NostrEventTemplate } from "nostr-tools";
+import { type Event as NostrEvent, type EventTemplate as NostrEventTemplate, type Filter } from "nostr-tools";
 import { RxNostr, createRxForwardReq, createRxNostr, getPublicKey as getPubkeyFromHex, uniq } from "rx-nostr";
 import { parsePubkey } from "./helpers";
 import type { NostrSigner } from "./interface";
@@ -12,7 +12,7 @@ interface Deferred<T> {
   reject(e?: unknown): void;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging:
 class Deferred<T> {
   promise: Promise<T>;
   constructor() {
@@ -84,7 +84,7 @@ class RxNostrRelayPool implements RelayPool {
 
     while (true) {
       if (retry === maxRetry) {
-        throw Error(`failed to publish: timed out multiple times and max retry count exceeded`);
+        throw Error("failed to publish: timed out multiple times and max retry count exceeded");
       }
       const res = await this.#tryPub(ev, 3000);
       switch (res.status) {
@@ -287,7 +287,9 @@ const parseLegacyConnToken = (token: string): Nip46ConnectionParams => {
       .split("&relay=")
       .map((r) => decodeURIComponent(r)) ?? [];
   try {
-    relayUrls?.forEach((r) => new URL(r));
+    for (const r of relayUrls) {
+      new URL(r);
+    }
   } catch {
     throw Error("connection token contains invalid relay URL");
   }
@@ -315,7 +317,12 @@ type StartSessionResult = {
   session: Nip46SessionState;
 };
 
-export type Nip46ClientMetadata = { name: string; url?: string; description?: string; icons?: string[] };
+export type Nip46ClientMetadata = {
+  name: string;
+  url?: string;
+  description?: string;
+  icons?: string[];
+};
 
 const generateRpcId = () => Math.random().toString(32).substring(2, 8);
 
@@ -374,7 +381,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
         } else if (resp.result) {
           respWait.resolve(resp.result);
         } else {
-          respWait.reject(new Error(`NIP-46 RPC: empty response`));
+          respWait.reject(new Error("NIP-46 RPC: empty response"));
         }
       } catch (err) {
         console.error("error on receiving NIP-46 RPC response", err);
@@ -387,7 +394,10 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     this.#closeRpcSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
   }
 
-  #startWaitingRpcResp(rpcId: string): { waitResp: Promise<string>; startCancelTimer: (timeoutMs: number) => void } {
+  #startWaitingRpcResp(rpcId: string): {
+    waitResp: Promise<string>;
+    startCancelTimer: (timeoutMs: number) => void;
+  } {
     const d = new Deferred<string>();
     this.#inflightRpcs.set(rpcId, d);
 

@@ -1,10 +1,10 @@
 import { bytesToHex } from "@noble/hashes/utils";
 import {
+  type Event as NostrEvent,
+  type EventTemplate as NostrEventTemplate,
   finalizeEvent,
   generateSecretKey,
   getPublicKey as nostrToolsGetPubkey,
-  type Event as NostrEvent,
-  type EventTemplate as NostrEventTemplate,
 } from "nostr-tools";
 import * as nip04 from "nostr-tools/nip04";
 import { parseSecKey } from "./helpers";
