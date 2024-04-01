@@ -34,7 +34,7 @@
     "rx-nostr": "^2.4.1"
   },
   "devDependencies": {
-    "@biomejs/biome": "1.5.3",
+    "@biomejs/biome": "1.6.3",
     "@lerna-lite/cli": "^3.2.0",
     "@lerna-lite/publish": "^3.2.0",
     "@lerna-lite/version": "^3.2.0",
