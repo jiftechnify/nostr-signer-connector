@@ -1,4 +1,4 @@
-import { type Event as NostrEvent, type EventTemplate as NostrEventTemplate } from "nostr-tools";
+import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 
 /**
  * The common interface of Nostr event signer.
