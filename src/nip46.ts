@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { type Event as NostrEvent, type EventTemplate as NostrEventTemplate, type Filter } from "nostr-tools";
-import { RxNostr, createRxForwardReq, createRxNostr, getPublicKey as getPubkeyFromHex, uniq } from "rx-nostr";
+import type { Event as NostrEvent, EventTemplate as NostrEventTemplate, Filter } from "nostr-tools";
+import { type RxNostr, createRxForwardReq, createRxNostr, getPublicKey as getPubkeyFromHex, uniq } from "rx-nostr";
 import { parsePubkey } from "./helpers";
 import type { NostrSigner } from "./interface";
 import { SecretKeySigner } from "./secret_key";

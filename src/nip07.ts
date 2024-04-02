@@ -1,4 +1,4 @@
-import { type Event as NostrEvent, type EventTemplate as NostrEventTemplate } from "nostr-tools";
+import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import type { NostrSigner } from "./interface";
 
 export type Nip07Extension = {
