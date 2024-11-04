@@ -206,12 +206,9 @@ export type Nip46ConnectionParams = {
   relayUrls: string[];
 };
 
-export const parseConnToken = (token: string): Nip46ConnectionParams => {
-  const isUriFormat = token.startsWith("bunker://");
-  return isUriFormat ? parseUriConnToken(token) : parseLegacyConnToken(token);
-};
+// parse connection token (format: bunker://<hex-pubkey>?relay=wss://...&relay=wss://...&secret=<optional-secret>)
+export const parseConnToken = (token: string): Nip46ConnectionParams => parseUriConnToken(token);
 
-// parse connection token (new URI format: bunker://<hex-pubkey>?relay=wss://...&relay=wss://...&secret=<optional-secret>)
 const parseUriConnToken = (token: string): Nip46ConnectionParams => {
   let u: URL;
   try {
@@ -234,69 +231,6 @@ const parseUriConnToken = (token: string): Nip46ConnectionParams => {
   return {
     remotePubkey,
     secretToken,
-    relayUrls,
-  };
-};
-
-// parse connection token (legacy format: <nsec1...>#<secret>?relay=wss://...&relay=wss://...)
-const parseLegacyConnToken = (token: string): Nip46ConnectionParams => {
-  let parts: {
-    pubkey: string;
-    secret?: string;
-    relays?: string;
-  };
-
-  const splitRelaysPart = (s: string): [string, string] => {
-    const qi = s.indexOf("?");
-    const ri = s.indexOf("relay=");
-    if (ri < qi) {
-      throw Error("invalid connection token");
-    }
-    return s.split("?", 2) as [string, string];
-  };
-
-  if (token.includes("#")) {
-    const [pubkey, rest] = token.split("#", 2) as [string, string];
-    if (rest.includes("?")) {
-      // <pubkey>#<secret>?<relays>
-      const [secret, relays] = splitRelaysPart(rest);
-      parts = { pubkey, secret, relays };
-    } else {
-      // <pubkey>#<secret>
-      parts = { pubkey, secret: rest };
-    }
-  } else {
-    if (token.includes("?")) {
-      // <pubkey>?<relays>
-      const [pubkey, relays] = splitRelaysPart(token);
-      parts = { pubkey, relays };
-    } else {
-      // <pubkey>
-      parts = { pubkey: token };
-    }
-  }
-
-  const pubkey = parsePubkey(parts.pubkey);
-  if (pubkey === undefined) {
-    throw Error("connection token contains invalid pubkey");
-  }
-
-  const relayUrls =
-    parts.relays
-      ?.replace("relay=", "")
-      .split("&relay=")
-      .map((r) => decodeURIComponent(r)) ?? [];
-  try {
-    for (const r of relayUrls) {
-      new URL(r);
-    }
-  } catch {
-    throw Error("connection token contains invalid relay URL");
-  }
-
-  return {
-    remotePubkey: pubkey,
-    secretToken: parts.secret,
     relayUrls,
   };
 };
