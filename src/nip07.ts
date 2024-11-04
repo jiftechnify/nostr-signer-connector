@@ -5,8 +5,12 @@ export type Nip07Extension = {
   getPublicKey(): Promise<string>;
   signEvent(event: NostrEventTemplate): Promise<NostrEvent>;
   nip04?: {
-    encrypt(pubKey: string, value: string): Promise<string>;
-    decrypt(pubKey: string, value: string): Promise<string>;
+    encrypt?(pubKey: string, value: string): Promise<string>;
+    decrypt?(pubKey: string, value: string): Promise<string>;
+  };
+  nip44?: {
+    encrypt?(pubKey: string, value: string): Promise<string>;
+    decrypt?(pubKey: string, value: string): Promise<string>;
   };
 };
 
@@ -52,7 +56,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    if (this.#nip07Ext.nip04 === undefined) {
+    if (this.#nip07Ext.nip04?.encrypt === undefined) {
       throw Error("NIP-07 browser extension doesn't support nip04.encrypt");
     }
     return this.#nip07Ext.nip04.encrypt(recipientPubkey, plaintext);
@@ -66,9 +70,37 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    if (this.#nip07Ext.nip04 === undefined) {
+    if (this.#nip07Ext.nip04?.decrypt === undefined) {
       throw Error("NIP-07 browser extension doesn't support nip04.decrypt");
     }
     return this.#nip07Ext.nip04.decrypt(senderPubkey, ciphertext);
+  }
+
+  /**
+   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   *
+   * @param recipientPubkey a public key of a message recipient, in hex string format
+   * @param plaintext a plaintext to encrypt
+   * @returns a Promise that resolves to a encrypted text
+   */
+  public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
+    if (this.#nip07Ext.nip44?.encrypt === undefined) {
+      throw Error("NIP-07 browser extension doesn't support nip44.encrypt");
+    }
+    return this.#nip07Ext.nip44.encrypt(recipientPubkey, plaintext);
+  }
+
+  /**
+   * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   *
+   * @param senderPubkey a public key of a message sender, in hex string format
+   * @param ciphertext a ciphertext to decrypt
+   * @returns a Promise that resolves to a decrypted text
+   */
+  public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
+    if (this.#nip07Ext.nip44?.decrypt === undefined) {
+      throw Error("NIP-07 browser extension doesn't support nip44.decrypt");
+    }
+    return this.#nip07Ext.nip44.decrypt(senderPubkey, ciphertext);
   }
 }

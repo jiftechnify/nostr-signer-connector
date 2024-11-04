@@ -171,6 +171,14 @@ type Nip46RpcSignatures = {
     params: [remotePubkey: string, cipherText: string];
     result: string;
   };
+  nip44_encrypt: {
+    params: [remotePubkey: string, plainText: string];
+    result: string;
+  };
+  nip44_decrypt: {
+    params: [remotePubkey: string, cipherText: string];
+    result: string;
+  };
 };
 
 type Nip46RpcMethods = keyof Nip46RpcSignatures;
@@ -191,6 +199,8 @@ const nip46RpcParamsEncoders: Nip46RpcParamsEncoders = {
   sign_event: ([ev]) => [JSON.stringify(ev)],
   nip04_encrypt: identity,
   nip04_decrypt: identity,
+  nip44_encrypt: identity,
+  nip44_decrypt: identity,
 };
 const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   connect: identity,
@@ -198,6 +208,8 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   sign_event: (raw: string) => JSON.parse(raw) as NostrEvent,
   nip04_encrypt: identity,
   nip04_decrypt: identity,
+  nip44_encrypt: identity,
+  nip44_decrypt: identity,
 };
 
 export type Nip46ConnectionParams = {
@@ -653,6 +665,28 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
     return this.#requestNip46Rpc("nip04_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+  }
+
+  /**
+   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   *
+   * @param recipientPubkey a public key of a message recipient, in hex string format
+   * @param plaintext a plaintext to encrypt
+   * @returns a Promise that resolves to a encrypted text
+   */
+  public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
+    return this.#requestNip46Rpc("nip44_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
+  }
+
+  /**
+   * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   *
+   * @param senderPubkey a public key of a message sender, in hex string format
+   * @param ciphertext a ciphertext to decrypt
+   * @returns a Promise that resolves to a decrypted text
+   */
+  public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
+    return this.#requestNip46Rpc("nip44_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
   }
 
   /**
