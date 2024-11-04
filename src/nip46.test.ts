@@ -24,37 +24,6 @@ describe("parseConnToken", () => {
     });
   });
 
-  describe("should parse legacy token", () => {
-    test("pubkey only", () => {
-      const { remotePubkey, relayUrls, secretToken } = parseConnToken(`${testPubkey.hex}`);
-      expect(remotePubkey).toBe(testPubkey.hex);
-      expect(secretToken).toBeUndefined();
-      expect(relayUrls).toHaveLength(0);
-    });
-    test("pubkey and secret token", () => {
-      const { remotePubkey, relayUrls, secretToken } = parseConnToken(`${testPubkey.hex}#123456`);
-      expect(remotePubkey).toBe(testPubkey.hex);
-      expect(secretToken).toBe("123456");
-      expect(relayUrls).toHaveLength(0);
-    });
-    test("pubkey and relay URLs", () => {
-      const { remotePubkey, relayUrls, secretToken } = parseConnToken(
-        `${testPubkey.hex}?relay=wss%3A%2F%2Fyabu.me&relay=wss%3A%2F%2Fnrelay.c-stellar.net`,
-      );
-      expect(remotePubkey).toBe(testPubkey.hex);
-      expect(secretToken).toBeUndefined();
-      expect(relayUrls).toEqual(["wss://yabu.me", "wss://nrelay.c-stellar.net"]);
-    });
-    test("pubkey, relay URLs and secret token", () => {
-      const { remotePubkey, relayUrls, secretToken } = parseConnToken(
-        `${testPubkey.hex}#123456?relay=wss%3A%2F%2Fyabu.me&relay=wss%3A%2F%2Fnrelay.c-stellar.net`,
-      );
-      expect(remotePubkey).toBe(testPubkey.hex);
-      expect(secretToken).toBe("123456");
-      expect(relayUrls).toEqual(["wss://yabu.me", "wss://nrelay.c-stellar.net"]);
-    });
-  });
-
   describe("should throw error when invalid connection token", () => {
     test("URL token: invalid schema", () => {
       expect(() => {
@@ -68,9 +37,9 @@ describe("parseConnToken", () => {
         parseConnToken("bunker://hoge");
       }).toThrowError();
     });
-    test("legacy token: invalid pubkey", () => {
+    test("legacy token format", () => {
       expect(() => {
-        parseConnToken("hoge#123456");
+        parseConnToken(`${testPubkey.hex}#123456?relay=wss%3A%2F%2Fyabu.me&relay=wss%3A%2F%2Fnrelay.c-stellar.net`);
       }).toThrowError();
     });
   });
