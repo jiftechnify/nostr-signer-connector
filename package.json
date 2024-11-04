@@ -38,21 +38,14 @@
     "@lerna-lite/cli": "^3.2.0",
     "@lerna-lite/publish": "^3.2.0",
     "@lerna-lite/version": "^3.2.0",
-    "@noble/hashes": "1.5.0",
     "@tsconfig/strictest": "^2.0.2",
     "@types/fs-extra": "^11.0.4",
-    "@typescript-eslint/eslint-plugin": "^7.0.2",
-    "@typescript-eslint/parser": "^7.0.2",
     "esbuild": "^0.20.0",
-    "eslint": "^8.56.0",
-    "eslint-config-prettier": "^9.1.0",
     "fs-extra": "^11.2.0",
     "npm-run-all": "^4.1.5",
     "prettier": "^3.1.1",
     "tsx": "^4.6.2",
     "typescript": "^5.3.3",
-    "vitest": "^1.1.0",
-    "vitest-websocket-mock": "^0.3.0",
-    "websocket-polyfill": "^1.0.0"
+    "vitest": "^1.1.0"
   }
 }
