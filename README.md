@@ -162,6 +162,16 @@ type NostrSigner = {
    * Decrypts a given ciphertext from others, by the decryption algorithm defined in NIP-04.
    */
   nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string>;
+
+  /**
+   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in NIP-44.
+   */
+  nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string>;
+
+  /**
+   * Decrypts a given ciphertext from others, by the decryption algorithm defined in NIP-44.
+   */
+  nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string>;
 };
 
 ```

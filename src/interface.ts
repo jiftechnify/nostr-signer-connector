@@ -34,4 +34,18 @@ export type NostrSigner = {
    * @returns a Promise that resolves to a decrypted text
    */
   nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string>;
+
+  /**
+   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   * @param recipientPubkey a public key of a message recipient, in hex string format
+   * @param plaintext a plaintext to encrypt
+   */
+  nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string>;
+
+  /**
+   * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   * @param senderPubkey a public key of a message sender, in hex string format
+   * @param ciphertext a ciphertext to decrypt
+   */
+  nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string>;
 };

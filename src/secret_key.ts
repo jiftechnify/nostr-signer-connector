@@ -7,6 +7,7 @@ import {
   getPublicKey as nostrToolsGetPubkey,
 } from "nostr-tools";
 import * as nip04 from "nostr-tools/nip04";
+import * as nip44 from "nostr-tools/nip44";
 import { parseSecKey } from "./helpers";
 import type { NostrSigner } from "./interface";
 
@@ -112,5 +113,29 @@ export class SecretKeySigner implements NostrSigner {
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
     return nip04.decrypt(this.#secKeyHex, senderPubkey, ciphertext);
+  }
+
+  /**
+   * Encrypts a given text to secretly communicate with others, by the encryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   *
+   * @param recipientPubkey a public key of a message recipient, in hex string format
+   * @param plaintext a plaintext to encrypt
+   * @returns a Promise that resolves to a encrypted text
+   */
+  public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
+    const convKey = nip44.v2.utils.getConversationKey(this.#secKeyBytes, recipientPubkey);
+    return nip44.v2.encrypt(plaintext, convKey);
+  }
+
+  /**
+   * Decrypts a given ciphertext from others, by the decryption algorithm defined in [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md).
+   *
+   * @param senderPubkey a public key of a message sender, in hex string format
+   * @param ciphertext a ciphertext to decrypt
+   * @returns a Promise that resolves to a decrypted text
+   */
+  public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
+    const convkey = nip44.v2.utils.getConversationKey(this.#secKeyBytes, senderPubkey);
+    return nip44.v2.decrypt(ciphertext, convkey);
   }
 }
