@@ -1,222 +1,10 @@
-import { setTimeout as delay } from "node:timers/promises";
-import type { Filter, Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { type RxNostr, createRxForwardReq, createRxNostr, getPublicKey as getPubkeyFromHex, uniq } from "rx-nostr";
-import { parsePubkey } from "./helpers";
-import type { NostrSigner } from "./interface";
-import { SecretKeySigner } from "./secret_key";
-
-const currentUnixtimeSec = () => Math.floor(Date.now() / 1000);
-
-interface Deferred<T> {
-  resolve(v: T | PromiseLike<T>): void;
-  reject(e?: unknown): void;
-}
-
-// biome-ignore lint/suspicious/noUnsafeDeclarationMerging:
-class Deferred<T> {
-  promise: Promise<T>;
-  constructor() {
-    this.promise = new Promise((resolve, reject) => {
-      this.resolve = (v) => {
-        resolve(v);
-      };
-      this.reject = (e) => {
-        reject(e);
-      };
-    });
-  }
-}
-
-type RelayPool = {
-  // start to subscribe events
-  subscribe(filter: Filter, onEvent: (ev: NostrEvent) => void): () => void;
-  // try to publish a Nostr event and wait for at least one OK response
-  publish(ev: NostrEvent): Promise<void>;
-  // try to reconnect to all relays
-  reconnectAll(): void;
-  // dispose the relay pool
-  dispose(): void;
-};
-
-type TryPubResult =
-  | {
-      status: "ok";
-    }
-  | {
-      status: "timeout";
-    }
-  | {
-      status: "error";
-      reason: string;
-    };
-
-class RxNostrRelayPool implements RelayPool {
-  #rxn: RxNostr;
-  #relayUrls: string[];
-
-  constructor(relayUrls: string[]) {
-    this.#relayUrls = relayUrls;
-
-    const rxn = createRxNostr({ skipFetchNip11: true });
-    rxn.setDefaultRelays(relayUrls);
-
-    rxn.createConnectionStateObservable().subscribe(({ from: rurl, state }) => {
-      console.debug(`[Nip46RemoteSigner] ${rurl}: connection state changed to ${state}`);
-    });
-
-    this.#rxn = rxn;
-  }
-
-  subscribe(filter: Filter, onEvent: (ev: NostrEvent) => void): () => void {
-    const req = createRxForwardReq();
-    const sub = this.#rxn
-      .use(req)
-      .pipe(uniq())
-      .subscribe(({ event }) => onEvent(event));
-
-    req.emit({ ...filter, since: currentUnixtimeSec });
-    return () => sub.unsubscribe();
-  }
-
-  async publish(ev: NostrEvent): Promise<void> {
-    const maxRetry = 3;
-    let retry = 0;
-
-    while (true) {
-      if (retry === maxRetry) {
-        throw Error("failed to publish: timed out multiple times and max retry count exceeded");
-      }
-      const res = await this.#tryPub(ev, 3000);
-      switch (res.status) {
-        case "ok":
-          return;
-
-        case "error":
-          throw Error(`failed to publish event: ${res.reason}`);
-
-        case "timeout":
-          await delay((1 << retry) * 1000);
-          retry++;
-      }
-    }
-  }
-
-  // try to publish event, and wait for at least one OK response
-  async #tryPub(ev: NostrEvent, timeoutMs: number): Promise<TryPubResult> {
-    return new Promise<TryPubResult>((resolve) => {
-      try {
-        const timeoutSig = AbortSignal.timeout(timeoutMs);
-        timeoutSig.addEventListener("abort", () => {
-          okSub.unsubscribe();
-          resolve({ status: "timeout" });
-        });
-        const okSub = this.#rxn.send(ev).subscribe(({ ok, notice }) => {
-          if (ok) {
-            resolve({ status: "ok" });
-          } else {
-            resolve({ status: "error", reason: notice ?? "(empty reason)" });
-          }
-        });
-      } catch (err) {
-        if (err instanceof Error) {
-          resolve({ status: "error", reason: err.message });
-        } else {
-          resolve({ status: "error", reason: "(unknown error)" });
-        }
-      }
-    });
-  }
-
-  reconnectAll(): void {
-    this.#relayUrls.map((rurl) => {
-      this.#rxn.reconnect(rurl);
-    });
-  }
-
-  dispose(): void {
-    this.#rxn.dispose();
-  }
-}
-
-type Nip46RpcReq = {
-  id: string;
-  method: string;
-  params: string[];
-};
-
-type Nip46RpcResp = {
-  id: string;
-  result?: string | undefined | null;
-  error?: string | undefined | null;
-};
-
-type Nip46RpcSignatures = {
-  connect: {
-    params: [pubkey: string, secret?: string, permissions?: string];
-    result: string;
-  };
-  get_public_key: {
-    params: [];
-    result: string;
-  };
-  sign_event: {
-    params: [event: NostrEventTemplate];
-    result: NostrEvent;
-  };
-  nip04_encrypt: {
-    params: [remotePubkey: string, plainText: string];
-    result: string;
-  };
-  nip04_decrypt: {
-    params: [remotePubkey: string, cipherText: string];
-    result: string;
-  };
-  nip44_encrypt: {
-    params: [remotePubkey: string, plainText: string];
-    result: string;
-  };
-  nip44_decrypt: {
-    params: [remotePubkey: string, cipherText: string];
-    result: string;
-  };
-  ping: {
-    params: [];
-    result: string;
-  };
-};
-
-type Nip46RpcMethods = keyof Nip46RpcSignatures;
-type Nip46RpcParams<M extends Nip46RpcMethods> = Nip46RpcSignatures[M]["params"];
-type Nip46RpcResult<M extends Nip46RpcMethods> = Nip46RpcSignatures[M]["result"];
-
-type Nip46RpcParamsEncoders = {
-  [M in keyof Nip46RpcSignatures]: (params: Nip46RpcParams<M>) => string[];
-};
-type Nip46RpcResultDecoders = {
-  [M in keyof Nip46RpcSignatures]: (rawResult: string) => Nip46RpcResult<M>;
-};
-
-const identity = <T>(v: T) => v;
-const nip46RpcParamsEncoders: Nip46RpcParamsEncoders = {
-  connect: (params) => params as string[],
-  get_public_key: identity,
-  sign_event: ([ev]) => [JSON.stringify(ev)],
-  nip04_encrypt: identity,
-  nip04_decrypt: identity,
-  nip44_encrypt: identity,
-  nip44_decrypt: identity,
-  ping: identity,
-};
-const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
-  connect: identity,
-  get_public_key: identity,
-  sign_event: (raw: string) => JSON.parse(raw) as NostrEvent,
-  nip04_encrypt: identity,
-  nip04_decrypt: identity,
-  nip44_encrypt: identity,
-  nip44_decrypt: identity,
-  ping: identity,
-};
+import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
+import { getPublicKey as getPubkeyFromHex } from "rx-nostr";
+import { currentUnixtimeSec, parsePubkey } from "../helpers";
+import type { NostrSigner } from "../interface";
+import { SecretKeySigner } from "../secret_key";
+import { type RelayPool, RxNostrRelayPool } from "./relay_pool";
+import { Nip46RpcClient, type Nip46RpcReq, type Nip46RpcResp } from "./rpc";
 
 export type Nip46ConnectionParams = {
   remotePubkey: string;
@@ -276,8 +64,6 @@ export type Nip46ClientMetadata = {
   icons?: string[];
 };
 
-const generateRpcId = () => Math.random().toString(32).substring(2, 8);
-
 // Default relays used by nsecbunkerd
 // cf. https://github.com/kind-0/nsecbunkerd/blob/master/src/config/index.ts#L29-L32
 const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"];
@@ -295,109 +81,14 @@ const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"
  * Your app should store the session state data, and use it to resume the session later via `Nip46RemoteSigner.resumeSession(sessionState)`.
  */
 export class Nip46RemoteSigner implements NostrSigner, Disposable {
-  #localSigner: NostrSigner;
+  #rpcCli: Nip46RpcClient;
   #remotePubkey: string;
-
-  #relayPool: RelayPool;
-  #closeRpcSub: (() => void) | undefined = undefined;
-
-  #inflightRpcs: Map<string, Deferred<string>> = new Map();
   #opTimeoutMs: number;
 
-  private constructor(localSigner: NostrSigner, remotePubkey: string, relayPool: RelayPool, opTimeoutMs: number) {
-    this.#localSigner = localSigner;
+  private constructor(rpcCli: Nip46RpcClient, remotePubkey: string, opTimeoutMs: number) {
+    this.#rpcCli = rpcCli;
     this.#remotePubkey = remotePubkey;
-    this.#relayPool = relayPool;
     this.#opTimeoutMs = opTimeoutMs;
-  }
-
-  async #startRpcRespSubscription() {
-    const localPubkey = await this.#localSigner.getPublicKey();
-
-    const onevent = async (ev: NostrEvent) => {
-      let rpcId: string | undefined;
-      try {
-        const plainContent = await this.#localSigner.nip04Decrypt(this.#remotePubkey, ev.content);
-        const resp = JSON.parse(plainContent) as Nip46RpcResp;
-        rpcId = resp.id;
-
-        const respWait = this.#inflightRpcs.get(resp.id);
-        if (respWait === undefined) {
-          console.debug("no waiter found for NIP-46 RPC response");
-          return;
-        }
-
-        // there are cases that `error` and `result` both have values, so check error first
-        if (resp.error) {
-          respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
-        } else if (resp.result) {
-          respWait.resolve(resp.result);
-        } else {
-          respWait.reject(new Error("NIP-46 RPC: empty response"));
-        }
-      } catch (err) {
-        console.error("error on receiving NIP-46 RPC response", err);
-      }
-
-      if (rpcId !== undefined) {
-        this.#inflightRpcs.delete(rpcId);
-      }
-    };
-    this.#closeRpcSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
-  }
-
-  #startWaitingRpcResp(rpcId: string): {
-    waitResp: Promise<string>;
-    startCancelTimer: (timeoutMs: number) => void;
-  } {
-    const d = new Deferred<string>();
-    this.#inflightRpcs.set(rpcId, d);
-
-    const startCancelTimer = (timeoutMs: number) => {
-      const signal = AbortSignal.timeout(timeoutMs);
-      signal.addEventListener(
-        "abort",
-        () => {
-          d.reject(new Error("NIP-46 RPC timed out!"));
-          this.#inflightRpcs.delete(rpcId);
-        },
-        { once: true },
-      );
-    };
-
-    return { waitResp: d.promise, startCancelTimer };
-  }
-
-  async #requestNip46Rpc<M extends Nip46RpcMethods>(
-    method: M,
-    params: Nip46RpcParams<M>,
-    timeoutMs: number,
-  ): Promise<Nip46RpcResult<M>> {
-    const rpcId = generateRpcId();
-    const { waitResp, startCancelTimer } = this.#startWaitingRpcResp(rpcId);
-
-    const rpcReq: Nip46RpcReq = {
-      id: rpcId,
-      method,
-      params: nip46RpcParamsEncoders[method](params),
-    };
-    const cipheredReq = await this.#localSigner.nip04Encrypt(this.#remotePubkey, JSON.stringify(rpcReq));
-    const reqEv: NostrEventTemplate = {
-      kind: 24133,
-      tags: [["p", this.#remotePubkey]],
-      content: cipheredReq,
-      created_at: currentUnixtimeSec(),
-    };
-    const signedReqEv = await this.#localSigner.signEvent(reqEv);
-
-    await this.#relayPool.publish(signedReqEv);
-
-    // once the request is sent, start a timer to cancel the request if it takes too long
-    startCancelTimer(timeoutMs);
-
-    // rethrow if RPC result in error.
-    const rawResp = await waitResp;
-    return nip46RpcResultDecoders[method](rawResp);
   }
 
   /**
@@ -421,15 +112,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       throw e;
     }
 
-    let signer: Nip46RemoteSigner | undefined;
-    try {
-      signer = new Nip46RemoteSigner(localSigner, remotePubkey, relayPool, operationTimeoutMs);
-      signer.#startRpcRespSubscription();
-      return signer;
-    } catch (e) {
-      signer?.dispose();
-      throw e;
-    }
+    const rpcCli = await Nip46RpcClient.init(localSigner, remotePubkey, relayPool);
+    return new Nip46RemoteSigner(rpcCli, remotePubkey, operationTimeoutMs);
   }
 
   /**
@@ -456,7 +140,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
         connParams.push(permissions.join(","));
       }
 
-      const connResp = await signer.#requestNip46Rpc("connect", connParams, operationTimeoutMs);
+      const connResp = await signer.#rpcCli.request("connect", connParams, operationTimeoutMs);
       if (connResp !== "ack") {
         console.warn("NIP-46 remote signer responded for `connect` with other than 'ack'");
       }
@@ -582,8 +266,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
           closeListenSub();
 
           // create a signer handle and start subscription for RPC resp
-          const signer = new Nip46RemoteSigner(localSigner, signerPubkey, relayPool, operationTimeoutMs);
-          signer.#startRpcRespSubscription();
+          const rpcCli = await Nip46RpcClient.init(localSigner, signerPubkey, relayPool);
+          const signer = new Nip46RemoteSigner(rpcCli, signerPubkey, operationTimeoutMs);
           resolve({
             signer,
             session: {
@@ -633,7 +317,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * Returns the public key that corresponds to the underlying secret key, in hex string format.
    */
   public async getPublicKey(): Promise<string> {
-    return this.#requestNip46Rpc("get_public_key", [], this.#opTimeoutMs);
+    return this.#rpcCli.request("get_public_key", [], this.#opTimeoutMs);
   }
 
   /**
@@ -648,7 +332,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     if (!ev.pubkey) {
       ev.pubkey = this.#remotePubkey;
     }
-    return this.#requestNip46Rpc("sign_event", [ev], this.#opTimeoutMs);
+    return this.#rpcCli.request("sign_event", [ev], this.#opTimeoutMs);
   }
 
   /**
@@ -659,7 +343,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    return this.#requestNip46Rpc("nip04_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip04_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
   }
 
   /**
@@ -670,7 +354,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    return this.#requestNip46Rpc("nip04_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip04_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
   }
 
   /**
@@ -681,7 +365,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    return this.#requestNip46Rpc("nip44_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip44_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
   }
 
   /**
@@ -692,14 +376,14 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    return this.#requestNip46Rpc("nip44_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip44_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
   }
 
   /**
    * Sends a ping to the remote signer.
    */
   public async ping(): Promise<void> {
-    const resp = await this.#requestNip46Rpc("ping", [], this.#opTimeoutMs);
+    const resp = await this.#rpcCli.request("ping", [], this.#opTimeoutMs);
     // response should be "pong"
     if (resp !== "pong") {
       throw Error("unexpected response for ping from the remote signer");
@@ -710,19 +394,14 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * Tries to reconnect to all the relays that are used to communicate with the remote signer.
    */
   public reconnectToRpcRelays() {
-    this.#relayPool.reconnectAll();
+    this.#rpcCli.reconnectToRelays();
   }
 
   /**
    * Disposes this remote signer handle.
    */
   public dispose() {
-    if (this.#closeRpcSub !== undefined) {
-      this.#closeRpcSub?.();
-      this.#closeRpcSub = undefined;
-    }
-    this.#relayPool.dispose();
-    this.#inflightRpcs.clear();
+    this.#rpcCli.dispose();
   }
 
   /**

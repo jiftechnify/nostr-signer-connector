@@ -33,3 +33,25 @@ export const parsePubkey = (pubkey: string): string | undefined => {
   }
   return undefined;
 };
+
+export const currentUnixtimeSec = () => Math.floor(Date.now() / 1000);
+
+export interface Deferred<T> {
+  resolve(v: T | PromiseLike<T>): void;
+  reject(e?: unknown): void;
+}
+
+// biome-ignore lint/suspicious/noUnsafeDeclarationMerging:
+export class Deferred<T> {
+  promise: Promise<T>;
+  constructor() {
+    this.promise = new Promise((resolve, reject) => {
+      this.resolve = (v) => {
+        resolve(v);
+      };
+      this.reject = (e) => {
+        reject(e);
+      };
+    });
+  }
+}
