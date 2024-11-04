@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { Event as NostrEvent, EventTemplate as NostrEventTemplate, Filter } from "nostr-tools";
+import type { Filter, Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import { type RxNostr, createRxForwardReq, createRxNostr, getPublicKey as getPubkeyFromHex, uniq } from "rx-nostr";
 import { parsePubkey } from "./helpers";
 import type { NostrSigner } from "./interface";
@@ -152,7 +152,7 @@ type Nip46RpcResp = {
 
 type Nip46RpcSignatures = {
   connect: {
-    params: [pubkey: string, secret?: string];
+    params: [pubkey: string, secret?: string, permissions?: string];
     result: string;
   };
   get_public_key: {
@@ -422,6 +422,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   static async #connect(
     localSigner: NostrSigner,
     { remotePubkey, secretToken, relayUrls }: Nip46ConnectionParams,
+    permissions: string[],
     operationTimeoutMs: number,
   ): Promise<Nip46RemoteSigner> {
     const signer = await Nip46RemoteSigner.#init(localSigner, remotePubkey, relayUrls, operationTimeoutMs);
@@ -432,6 +433,9 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       const connParams: [string] = [localPubkey];
       if (secretToken !== undefined) {
         connParams.push(secretToken);
+      }
+      if (permissions.length > 0) {
+        connParams.push(permissions.join(","));
       }
 
       const connResp = await signer.#requestNip46Rpc("connect", connParams, operationTimeoutMs);
@@ -462,13 +466,17 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    *
    * @returns a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
    */
-  public static async connectToRemote(connToken: string, operationTimeoutMs = 15 * 1000): Promise<StartSessionResult> {
+  public static async connectToRemote(
+    connToken: string,
+    permissions: string[] = [],
+    operationTimeoutMs = 15 * 1000,
+  ): Promise<StartSessionResult> {
     const connParams = parseConnToken(connToken);
     const localSigner = SecretKeySigner.withRandomKey();
     const sessionKey = localSigner.secretKey;
 
     return {
-      signer: await Nip46RemoteSigner.#connect(localSigner, connParams, operationTimeoutMs),
+      signer: await Nip46RemoteSigner.#connect(localSigner, connParams, permissions, operationTimeoutMs),
       session: {
         sessionKey,
         ...connParams,
