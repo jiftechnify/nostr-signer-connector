@@ -179,6 +179,10 @@ type Nip46RpcSignatures = {
     params: [remotePubkey: string, cipherText: string];
     result: string;
   };
+  ping: {
+    params: [];
+    result: string;
+  };
 };
 
 type Nip46RpcMethods = keyof Nip46RpcSignatures;
@@ -201,6 +205,7 @@ const nip46RpcParamsEncoders: Nip46RpcParamsEncoders = {
   nip04_decrypt: identity,
   nip44_encrypt: identity,
   nip44_decrypt: identity,
+  ping: identity,
 };
 const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   connect: identity,
@@ -210,6 +215,7 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   nip04_decrypt: identity,
   nip44_encrypt: identity,
   nip44_decrypt: identity,
+  ping: identity,
 };
 
 export type Nip46ConnectionParams = {
@@ -687,6 +693,17 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    */
   public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
     return this.#requestNip46Rpc("nip44_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+  }
+
+  /**
+   * Sends a ping to the remote signer.
+   */
+  public async ping(): Promise<void> {
+    const resp = await this.#requestNip46Rpc("ping", [], this.#opTimeoutMs);
+    // response should be "pong"
+    if (resp !== "pong") {
+      throw Error("unexpected response for ping from the remote signer");
+    }
   }
 
   /**
