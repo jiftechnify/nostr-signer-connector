@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { parseConnToken } from "./nip46";
+import { parseConnToken } from "./signer";
 
 const testPubkey = {
   hex: "d1d1747115d16751a97c239f46ec1703292c3b7e9988b9ebdd4ec4705b15ed44",
