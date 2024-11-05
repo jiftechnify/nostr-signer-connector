@@ -1,7 +1,6 @@
-import { setTimeout as delay } from "node:timers/promises";
 import type { Filter, NostrEvent } from "nostr-tools";
 import { type RxNostr, createRxForwardReq, createRxNostr, uniq } from "rx-nostr";
-import { currentUnixtimeSec } from "../helpers";
+import { currentUnixtimeSec, delay } from "../helpers";
 
 export type RelayPool = {
   // start to subscribe events

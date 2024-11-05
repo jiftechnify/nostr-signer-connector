@@ -55,3 +55,5 @@ export class Deferred<T> {
     });
   }
 }
+
+export const delay = (durationMs: number) => new Promise((resolve) => setTimeout(resolve, durationMs));
