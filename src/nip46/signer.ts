@@ -1,10 +1,10 @@
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import { getPublicKey as getPubkeyFromHex } from "rx-nostr";
-import { currentUnixtimeSec, parsePubkey } from "../helpers";
+import { generateRandomString, parsePubkey } from "../helpers";
 import type { NostrSigner } from "../interface";
 import { SecretKeySigner } from "../secret_key";
 import { type RelayPool, RxNostrRelayPool } from "./relay_pool";
-import { Nip46RpcClient, type Nip46RpcReq, type Nip46RpcResp } from "./rpc";
+import { Nip46RpcClient } from "./rpc";
 
 export type Nip46ConnectionParams = {
   remotePubkey: string;
@@ -213,86 +213,32 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     const localPubkey = getPubkeyFromHex(sessionKey);
 
     // construct nostrconnect URI
+    const connSecret = generateRandomString();
     const connUri = new URL(`nostrconnect://${localPubkey}`);
     for (const rurl of relayUrls) {
       connUri.searchParams.append("relay", rurl);
     }
-    connUri.searchParams.append("metadata", JSON.stringify(clientMetadata));
+    connUri.searchParams.set("metadata", JSON.stringify(clientMetadata));
+    connUri.searchParams.set("secret", connSecret);
 
-    const ac = new AbortController();
-    const cancel = () => ac.abort();
+    const relayPool = new RxNostrRelayPool(relayUrls);
+    const { respReceived, cancel } = Nip46RpcClient.startWaitingForConnectRespFromRemote(
+      localSigner,
+      relayPool,
+      connSecret,
+    );
 
-    // a promise that is resolved once a 'connect' request from a remote signer is received
-    const established = new Promise<StartSessionResult>((resolve, reject) => {
-      const relayPool = new RxNostrRelayPool(relayUrls);
-
-      const onevent = async (ev: NostrEvent) => {
-        try {
-          const signerPubkey = ev.pubkey;
-          const plainContent = await localSigner.nip04Decrypt(signerPubkey, ev.content);
-          const req = JSON.parse(plainContent) as Nip46RpcReq;
-          if (req.method !== "connect") {
-            console.warn("ignoring request other than 'connect'");
-            return;
-          }
-          if (req.params.length <= 0) {
-            console.warn("ignoring 'connect' request with empty params");
-            return;
-          }
-          const paramPubkey = parsePubkey(req.params[0] as string);
-          if (paramPubkey === undefined || signerPubkey !== paramPubkey) {
-            console.warn("ignoring 'connect' request with invalid pubkey");
-            return;
-          }
-
-          const resp: Nip46RpcResp = {
-            id: req.id,
-            result: "ack",
-            error: "",
-          };
-          const cipheredResp = await localSigner.nip04Encrypt(signerPubkey, JSON.stringify(resp));
-          const respEv: NostrEventTemplate = {
-            kind: 24133,
-            tags: [["p", signerPubkey]],
-            content: cipheredResp,
-            created_at: currentUnixtimeSec(),
-          };
-          const signedResp = await localSigner.signEvent(respEv);
-
-          await relayPool.publish(signedResp);
-
-          // session established!
-          // close subscription for listening 'connect' from remote
-          closeListenSub();
-
-          // create a signer handle and start subscription for RPC resp
-          const rpcCli = await Nip46RpcClient.init(localSigner, signerPubkey, relayPool);
-          const signer = new Nip46RemoteSigner(rpcCli, signerPubkey, operationTimeoutMs);
-          resolve({
-            signer,
-            session: {
-              sessionKey,
-              remotePubkey: signerPubkey,
-              relayUrls,
-            },
-          });
-        } catch (err) {
-          console.error("error on accepting connect request from remote signer", err);
-        }
-      };
-
-      // start to listen connect request
-      const closeListenSub = relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
-
-      // cancel listening connection
-      ac.signal.addEventListener(
-        "abort",
-        async () => {
-          reject(Error("Nip46RemoteSigner.listenConnection: canceled"));
-          closeListenSub();
+    const established = respReceived.then(async (signerPubkey) => {
+      const rpcCli = await Nip46RpcClient.init(localSigner, signerPubkey, relayPool);
+      const signer = new Nip46RemoteSigner(rpcCli, signerPubkey, operationTimeoutMs);
+      return {
+        signer,
+        session: {
+          sessionKey,
+          remotePubkey: signerPubkey,
+          relayUrls,
         },
-        { once: true },
-      );
+      };
     });
 
     return {

@@ -36,6 +36,8 @@ export const parsePubkey = (pubkey: string): string | undefined => {
 
 export const currentUnixtimeSec = () => Math.floor(Date.now() / 1000);
 
+export const generateRandomString = () => Math.random().toString(32).substring(2, 8);
+
 export interface Deferred<T> {
   resolve(v: T | PromiseLike<T>): void;
   reject(e?: unknown): void;
