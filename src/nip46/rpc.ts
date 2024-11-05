@@ -1,5 +1,5 @@
 import type { NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { Deferred, currentUnixtimeSec, generateRandomString } from "../helpers";
+import { Deferred, currentUnixtimeSec, generateRandomString, smartDecrypt } from "../helpers";
 import type { NostrSigner } from "../interface";
 import type { SecretKeySigner } from "../secret_key";
 import type { RelayPool } from "./relay_pool";
@@ -35,7 +35,7 @@ type ParsedNip46RpcResp = { id: string } & (
 );
 
 const parseNip46RpcResp = async (ev: NostrEvent, signer: NostrSigner): Promise<ParsedNip46RpcResp> => {
-  const plainContent = await signer.nip04Decrypt(ev.pubkey, ev.content);
+  const plainContent = await smartDecrypt(signer, ev.pubkey, ev.content);
   const { id, result, error } = JSON.parse(plainContent) as Nip46RpcResp;
 
   // there are cases that both `error` and `result` have values, so check error first
@@ -224,8 +224,6 @@ export class Nip46RpcClient {
   }
 
   async #startRespSubscription() {
-    const localPubkey = await this.#localSigner.getPublicKey();
-
     const onevent = async (ev: NostrEvent) => {
       let rpcId: string | undefined;
       try {
@@ -260,6 +258,8 @@ export class Nip46RpcClient {
         this.#inflightRpcs.delete(rpcId);
       }
     };
+
+    const localPubkey = await this.#localSigner.getPublicKey();
     this.#closeSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
   }
 

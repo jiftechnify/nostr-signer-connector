@@ -1,10 +1,13 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { decode as decodeNip19 } from "nostr-tools/nip19";
+import type { NostrSigner } from "./interface";
 
 const regexHexKey = /^[0-9a-f]{64}$/;
 
-// parse the given secret key of any string format (hex/bech32)
-// returns undefined if the input is invalid
+/**
+ * Parses the given secret key of any string format (hex/bech32)
+ * @returns Secret key as both a hex string and an array of bytes, or undefined if the input is invalid
+ */
 export const parseSecKey = (secKey: string): { hex: string; bytes: Uint8Array } | undefined => {
   if (secKey.startsWith("nsec1")) {
     const bytes = decodeNip19(secKey as `nsec1${string}`).data;
@@ -22,8 +25,10 @@ export const parseSecKey = (secKey: string): { hex: string; bytes: Uint8Array } 
   return undefined;
 };
 
-// parse the given public key of any string format (hex/bech32) as hex
-// returns undefined if the input is invalid
+/**
+ * Parses the given public key of any string format (hex/bech32) as hex
+ * @returns Public key as a hex string, or undefined if the input is invalid
+ */
 export const parsePubkey = (pubkey: string): string | undefined => {
   if (pubkey.startsWith("npub1")) {
     return decodeNip19(pubkey as `npub1${string}`).data;
@@ -34,6 +39,21 @@ export const parsePubkey = (pubkey: string): string | undefined => {
   return undefined;
 };
 
+/**
+ * Detects encryption algorithm (NIP-04 or NIP-44) of the ciphertext smartly, then decrypts it with corresponding decryption algorithm.
+ */
+export const smartDecrypt = (signer: NostrSigner, senderPubkey: string, ciphertext: string): Promise<string> => {
+  const lastPart = ciphertext.split("?iv=").at(-1);
+  if (lastPart !== undefined && lastPart.length === 24) {
+    // ciphertext has an IV part, so assuming it's NIP-04 encrypted
+    return signer.nip04Decrypt(senderPubkey, ciphertext);
+  }
+  return signer.nip44Decrypt(senderPubkey, ciphertext);
+};
+
+/**
+ * Current Unix timestamp in seconds.
+ */
 export const currentUnixtimeSec = () => Math.floor(Date.now() / 1000);
 
 export const generateRandomString = () => Math.random().toString(32).substring(2, 8);
