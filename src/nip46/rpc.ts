@@ -23,7 +23,7 @@ const parseRpcResp = async (ev: NostrEvent, signer: NostrSigner): Promise<Nip46R
 
 type Nip46RpcSignatures = {
   connect: {
-    params: [pubkey: string, secret?: string, permissions?: string];
+    params: [remotePubkey: string, secret?: string, permissions?: string];
     result: string;
   };
   get_public_key: {

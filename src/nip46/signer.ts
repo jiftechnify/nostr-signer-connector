@@ -131,8 +131,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
 
     // perform connection handshake
     try {
-      const localPubkey = await localSigner.getPublicKey();
-      const connParams: [string] = [localPubkey];
+      const connParams: [string] = [remotePubkey];
       if (secretToken !== undefined) {
         connParams.push(secretToken);
       }
