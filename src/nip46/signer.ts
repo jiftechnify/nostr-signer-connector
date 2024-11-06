@@ -201,6 +201,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   public static listenConnectionFromRemote(
     relayUrls: string[],
     clientMetadata: Nip46ClientMetadata,
+    permissions: string[] = [],
     operationTimeoutMs = 15 * 1000,
   ): {
     connectUri: string;
@@ -217,7 +218,12 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     for (const rurl of relayUrls) {
       connUri.searchParams.append("relay", rurl);
     }
-    connUri.searchParams.set("metadata", JSON.stringify(clientMetadata));
+
+    const metaWithPerms = {
+      ...clientMetadata,
+      perms: permissions.length > 0 ? permissions.join(",") : undefined,
+    };
+    connUri.searchParams.set("metadata", JSON.stringify(metaWithPerms));
     connUri.searchParams.set("secret", connSecret);
 
     const relayPool = new RxNostrRelayPool(relayUrls);
