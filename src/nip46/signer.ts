@@ -8,8 +8,8 @@ import { Nip46RpcClient } from "./rpc";
 
 export type Nip46ConnectionParams = {
   remotePubkey: string;
-  secretToken?: string | undefined;
   relayUrls: string[];
+  secretToken?: string | undefined;
 };
 
 // parse connection token (format: bunker://<hex-pubkey>?relay=wss://...&relay=wss://...&secret=<optional-secret>)
@@ -33,11 +33,14 @@ const parseUriConnToken = (token: string): Nip46ConnectionParams => {
   }
   const secretToken = u.searchParams.get("secret") ?? undefined;
   const relayUrls = u.searchParams.getAll("relay");
+  if (relayUrls.length === 0) {
+    throw Error("connection token contains no relay URLs");
+  }
 
   return {
     remotePubkey,
-    secretToken,
     relayUrls,
+    secretToken,
   };
 };
 
@@ -63,10 +66,6 @@ export type Nip46ClientMetadata = {
   description?: string;
   icons?: string[];
 };
-
-// Default relays used by nsecbunkerd
-// cf. https://github.com/kind-0/nsecbunkerd/blob/master/src/config/index.ts#L29-L32
-const defaultNip46Relays = ["wss://relay.nsecbunker.com", "wss://relay.damus.io"];
 
 /**
  * An implementation of NostrSigner based on a [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer (a.k.a. Nostr Connect or nsecBunker).
@@ -99,14 +98,14 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   static async #init(
     localSigner: NostrSigner,
     remotePubkey: string,
-    relayUrls: string[] | undefined,
+    relayUrls: string[],
     operationTimeoutMs: number,
   ): Promise<Nip46RemoteSigner> {
-    const relayUrlsOrDefault = relayUrls ? relayUrls : defaultNip46Relays;
+    // const relayUrlsOrDefault = relayUrls ? relayUrls : defaultNip46Relays;
 
     let relayPool: RelayPool | undefined;
     try {
-      relayPool = new RxNostrRelayPool(relayUrlsOrDefault);
+      relayPool = new RxNostrRelayPool(relayUrls);
     } catch (e) {
       relayPool?.dispose();
       throw e;
@@ -233,7 +232,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       connSecret,
     );
 
-    const established = respReceived.then(async (signerPubkey) => {
+    const established = respReceived.then(async (signerPubkey): Promise<StartSessionResult> => {
       const rpcCli = await Nip46RpcClient.init(localSigner, signerPubkey, relayPool);
       const signer = new Nip46RemoteSigner(rpcCli, signerPubkey, operationTimeoutMs);
       return {
