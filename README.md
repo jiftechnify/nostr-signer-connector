@@ -146,6 +146,11 @@ type NostrSigner = {
   getPublicKey(): Promise<string>;
 
   /**
+   * Returns the list of relays preferred by the user.
+   */
+  getRelays(): Promise<{ [relayUrl: string]: { read: boolean; write: boolean } }>;
+
+  /**
    * Signs a given Nostr event with the underlying secret key.
    */
   signEvent(event: NostrEventTemplate): Promise<NostrEvent>;

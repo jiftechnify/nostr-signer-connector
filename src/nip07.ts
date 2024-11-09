@@ -1,9 +1,10 @@
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
-import type { NostrSigner } from "./interface";
+import type { NostrSigner, RelayList } from "./interface";
 
 export type Nip07Extension = {
   getPublicKey(): Promise<string>;
   signEvent(event: NostrEventTemplate): Promise<NostrEvent>;
+  getRelays?(): Promise<RelayList>;
   nip04?: {
     encrypt?(pubKey: string, value: string): Promise<string>;
     decrypt?(pubKey: string, value: string): Promise<string>;
@@ -39,6 +40,18 @@ export class Nip07ExtensionSigner implements NostrSigner {
   }
 
   /**
+   * Returns the list of relays preferred by the user.
+   *
+   * Each entry is a mapping from the relay URL to the preferred use (read/write) of the relay.
+   */
+  public async getRelays(): Promise<RelayList> {
+    if (typeof this.#nip07Ext.getRelays !== "function") {
+      throw Error("NIP-07 browser extension doesn't support getRelays");
+    }
+    return this.#nip07Ext.getRelays();
+  }
+
+  /**
    * Signs a given Nostr event with the underlying secret key.
    *
    * @param event a Nostr event template (unsigned event)
@@ -56,7 +69,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    if (this.#nip07Ext.nip04?.encrypt === undefined) {
+    if (typeof this.#nip07Ext.nip04?.encrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip04.encrypt");
     }
     return this.#nip07Ext.nip04.encrypt(recipientPubkey, plaintext);
@@ -70,7 +83,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    if (this.#nip07Ext.nip04?.decrypt === undefined) {
+    if (typeof this.#nip07Ext.nip04?.decrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip04.decrypt");
     }
     return this.#nip07Ext.nip04.decrypt(senderPubkey, ciphertext);
@@ -84,7 +97,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    if (this.#nip07Ext.nip44?.encrypt === undefined) {
+    if (typeof this.#nip07Ext.nip44?.encrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip44.encrypt");
     }
     return this.#nip07Ext.nip44.encrypt(recipientPubkey, plaintext);
@@ -98,7 +111,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    if (this.#nip07Ext.nip44?.decrypt === undefined) {
+    if (typeof this.#nip07Ext.nip44?.decrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip44.decrypt");
     }
     return this.#nip07Ext.nip44.decrypt(senderPubkey, ciphertext);

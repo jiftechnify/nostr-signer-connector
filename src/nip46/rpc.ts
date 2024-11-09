@@ -1,6 +1,6 @@
 import type { NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import { Deferred, currentUnixtimeSec, generateRandomString, mergeOptionsWithDefaults } from "../helpers";
-import type { NostrSigner } from "../interface";
+import type { NostrSigner, RelayList } from "../interface";
 import type { SecretKeySigner } from "../secret_key";
 import type { RelayPool } from "./relay_pool";
 
@@ -58,13 +58,21 @@ type Nip46RpcSignatures = {
     params: [remotePubkey: string, secret?: string, permissions?: string];
     result: string;
   };
-  get_public_key: {
-    params: [];
-    result: string;
-  };
   sign_event: {
     params: [event: NostrEventTemplate];
     result: NostrEvent;
+  };
+  ping: {
+    params: [];
+    result: string;
+  };
+  get_relays: {
+    params: [];
+    result: RelayList;
+  };
+  get_public_key: {
+    params: [];
+    result: string;
   };
   nip04_encrypt: {
     params: [remotePubkey: string, plainText: string];
@@ -80,10 +88,6 @@ type Nip46RpcSignatures = {
   };
   nip44_decrypt: {
     params: [remotePubkey: string, cipherText: string];
-    result: string;
-  };
-  ping: {
-    params: [];
     result: string;
   };
 };
@@ -102,23 +106,25 @@ type Nip46RpcResultDecoders = {
 const identity = <T>(v: T) => v;
 const nip46RpcParamsEncoders: Nip46RpcParamsEncoders = {
   connect: (params) => params as string[],
-  get_public_key: identity,
   sign_event: ([ev]) => [JSON.stringify(ev)],
+  ping: identity,
+  get_relays: identity,
+  get_public_key: identity,
   nip04_encrypt: identity,
   nip04_decrypt: identity,
   nip44_encrypt: identity,
   nip44_decrypt: identity,
-  ping: identity,
 };
 const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   connect: identity,
-  get_public_key: identity,
   sign_event: (raw: string) => JSON.parse(raw) as NostrEvent,
+  ping: identity,
+  get_relays: (raw: string) => JSON.parse(raw) as RelayList,
+  get_public_key: identity,
   nip04_encrypt: identity,
   nip04_decrypt: identity,
   nip44_encrypt: identity,
   nip44_decrypt: identity,
-  ping: identity,
 };
 
 /**

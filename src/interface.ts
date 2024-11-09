@@ -10,6 +10,13 @@ export type NostrSigner = {
   getPublicKey(): Promise<string>;
 
   /**
+   * Returns the list of relays preferred by the user.
+   *
+   * Each entry is a mapping from the relay URL to the preferred use (read/write) of the relay.
+   */
+  getRelays(): Promise<RelayList>;
+
+  /**
    * Signs a given Nostr event with the underlying secret key.
    *
    * @param event a Nostr event template (unsigned event)
@@ -48,4 +55,8 @@ export type NostrSigner = {
    * @param ciphertext a ciphertext to decrypt
    */
   nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string>;
+};
+
+export type RelayList = {
+  [relayUrl: string]: { read: boolean; write: boolean };
 };
