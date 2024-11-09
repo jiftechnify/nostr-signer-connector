@@ -1,5 +1,5 @@
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { getPublicKey as getPubkeyFromHex } from "rx-nostr";
+import { getPublicKey as getPubkeyFromHex } from "rx-nostr-crypto";
 import { generateRandomString, mergeOptionsWithDefaults, parsePubkey } from "../helpers";
 import type { NostrSigner, RelayList } from "../interface";
 import { SecretKeySigner } from "../secret_key";
