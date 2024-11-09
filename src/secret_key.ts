@@ -9,7 +9,7 @@ import {
 import * as nip04 from "nostr-tools/nip04";
 import * as nip44 from "nostr-tools/nip44";
 import { parseSecKey } from "./helpers";
-import type { NostrSigner } from "./interface";
+import type { NostrSigner, RelayList } from "./interface";
 
 /**
  * An implementation of NostrSigner based on a bare secret key in memory.
@@ -81,6 +81,15 @@ export class SecretKeySigner implements NostrSigner {
    */
   public async getPublicKey(): Promise<string> {
     return this.publicKey;
+  }
+
+  /**
+   * Returns the list of relays preferred by the user.
+   *
+   * `getRelays()` on `SecretKeySigner` acutually returns an empty list because it doesn't have any information of user preferences about relays.
+   */
+  public async getRelays(): Promise<RelayList> {
+    return {};
   }
 
   /**

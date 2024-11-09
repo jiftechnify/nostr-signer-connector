@@ -1,7 +1,7 @@
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import { getPublicKey as getPubkeyFromHex } from "rx-nostr";
 import { generateRandomString, mergeOptionsWithDefaults, parsePubkey } from "../helpers";
-import type { NostrSigner } from "../interface";
+import type { NostrSigner, RelayList } from "../interface";
 import { SecretKeySigner } from "../secret_key";
 import { type RelayPool, RxNostrRelayPool } from "./relay_pool";
 import { Nip46RpcClient, type Nip46RpcClientOptions, defaultRpcCliOptions } from "./rpc";
@@ -289,6 +289,15 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    */
   public async getPublicKey(): Promise<string> {
     return this.#rpcCli.request("get_public_key", []);
+  }
+
+  /**
+   * Returns the list of relays preferred by the user.
+   *
+   * Each entry is a mapping from the relay URL to the preferred use (read/write) of the relay.
+   */
+  public async getRelays(): Promise<RelayList> {
+    return this.#rpcCli.request("get_relays", []);
   }
 
   /**
