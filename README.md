@@ -88,9 +88,6 @@ You can wait until a session is established by `await`-ing on `established` prop
 This promise resolves to an object that have session data (`session`) along with a handle to the remote signer (`signer`).
 **You should store this session data in somewhere** to resume the session later (e.g. after a browser reload).
 
-You can cancel listening a connection from the remote signer by calling `cancel` function in the return value.
-When you cancel, `established` is rejected with an error.
-
 ```ts
 import { Nip46RemoteSigner, type Nip46ClientMetadata } from 'nostr-signer-connector';
 
@@ -100,7 +97,7 @@ const client: Nip46ClientMetadata = {
     url: "https://example.com",
     description: "just a sample"
 };
-const { connectUri, established, cancel } = 
+const { connectUri, established } = 
     Nip46RemoteSigner.listenConnectionFromRemote(relayUrls, client);
 
 // show the connect URI to user

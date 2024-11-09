@@ -8,13 +8,15 @@ const testPubkey = {
 
 describe("parseConnToken", () => {
   describe("should parse bunker:// token", () => {
-    test("pubkey only", () => {
-      const { remotePubkey, relayUrls, secretToken } = parseConnToken(`bunker://${testPubkey.npub}`);
+    test("minimal", () => {
+      const { remotePubkey, relayUrls, secretToken } = parseConnToken(
+        `bunker://${testPubkey.npub}?relay=wss%3A%2F%2Fyabu.me&relay=wss%3A%2F%2Fnrelay.c-stellar.net`,
+      );
       expect(remotePubkey).toBe(testPubkey.hex);
-      expect(relayUrls).toHaveLength(0);
+      expect(relayUrls).toEqual(["wss://yabu.me", "wss://nrelay.c-stellar.net"]);
       expect(secretToken).toBeUndefined();
     });
-    test("pubkey, relay URLs and secret token", () => {
+    test("with secret", () => {
       const { remotePubkey, relayUrls, secretToken } = parseConnToken(
         `bunker://${testPubkey.npub}?relay=wss%3A%2F%2Fyabu.me&relay=wss%3A%2F%2Fnrelay.c-stellar.net&secret=123456`,
       );
@@ -25,16 +27,21 @@ describe("parseConnToken", () => {
   });
 
   describe("should throw error when invalid connection token", () => {
-    test("URL token: invalid schema", () => {
+    test("invalid schema", () => {
       expect(() => {
         parseConnToken(
           `invalid://${testPubkey.npub}?relay=wss%3A%2F%2Fyabu.me&relay=wss%3A%2F%2Fnrelay.c-stellar.net&secret=123456`,
         );
       }).toThrowError();
     });
-    test("URL token: invalid pubkey", () => {
+    test("invalid pubkey", () => {
       expect(() => {
         parseConnToken("bunker://hoge");
+      }).toThrowError();
+    });
+    test("no relay URLs", () => {
+      expect(() => {
+        parseConnToken(`bunker://${testPubkey.npub}`);
       }).toThrowError();
     });
     test("legacy token format", () => {

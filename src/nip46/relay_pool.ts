@@ -32,7 +32,7 @@ export class RxNostrRelayPool implements RelayPool {
   constructor(relayUrls: string[]) {
     this.#relayUrls = relayUrls;
 
-    const rxn = createRxNostr({ skipFetchNip11: true });
+    const rxn = createRxNostr({ skipFetchNip11: true, connectionStrategy: "lazy-keep" });
     rxn.setDefaultRelays(relayUrls);
 
     rxn.createConnectionStateObservable().subscribe(({ from: rurl, state }) => {
