@@ -12,29 +12,31 @@ export type Nip46ConnectionParams = {
   secretToken?: string | undefined;
 };
 
-// parse connection token (format: bunker://<hex-pubkey>?relay=wss://...&relay=wss://...&secret=<optional-secret>)
-export const parseConnToken = (token: string): Nip46ConnectionParams => parseUriConnToken(token);
+const BUNKER_TOKEN_PREFIX = "bunker://";
+const BUNKER_TOKEN_PREFIX_LEN = BUNKER_TOKEN_PREFIX.length;
 
-const parseUriConnToken = (token: string): Nip46ConnectionParams => {
-  let u: URL;
-  try {
-    u = new URL(token);
-  } catch {
-    throw Error("invalid connection token");
+// parse `bunker://` connection token (format: bunker://<hex-pubkey>?relay=wss://...&relay=wss://...&secret=<optional-secret>)
+export const parseBunkerToken = (token: string): Nip46ConnectionParams => {
+  if (!token.startsWith(BUNKER_TOKEN_PREFIX)) {
+    throw Error("invalid bunker connection token: must starts with 'bunker://'");
   }
-  if (u.protocol !== "bunker:") {
-    throw Error("invalid connection token");
+  const prefixTrimmed = token.substring(BUNKER_TOKEN_PREFIX_LEN);
+  const qIdx = prefixTrimmed.indexOf("?");
+  if (qIdx < 0) {
+    throw Error("invalid bunker connection token: must have '?'");
   }
 
-  const rawPubkey = u.host;
+  const [rawPubkey, rawParams] = [prefixTrimmed.substring(0, qIdx), prefixTrimmed.substring(qIdx + 1)];
   const remotePubkey = parsePubkey(rawPubkey);
   if (remotePubkey === undefined) {
-    throw Error("connection token contains invalid pubkey");
+    throw Error("invalid bunker connection token: malformed pubkey");
   }
-  const secretToken = u.searchParams.get("secret") ?? undefined;
-  const relayUrls = u.searchParams.getAll("relay");
+
+  const searchParams = new URLSearchParams(rawParams);
+  const secretToken = searchParams.get("secret") ?? undefined;
+  const relayUrls = searchParams.getAll("relay");
   if (relayUrls.length === 0) {
-    throw Error("connection token contains no relay URLs");
+    throw Error("invalid bunker connection token: must have at least 1 relay URL");
   }
 
   return {
@@ -189,7 +191,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   ): Promise<StartSessionResult> {
     const finalOpts = mergeOptionsWithDefaults(defaultConnectOptions, options);
 
-    const connParams = parseConnToken(connToken);
+    const connParams = parseBunkerToken(connToken);
     const localSigner = SecretKeySigner.withRandomKey();
     const sessionKey = localSigner.secretKey;
 
