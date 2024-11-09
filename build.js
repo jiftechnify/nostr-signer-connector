@@ -1,4 +1,4 @@
-import cp from "child_process";
+import cp from "node:child_process";
 import { build } from "esbuild";
 import fs from "fs-extra";
 
@@ -10,7 +10,7 @@ const sharedBuildOptions = {
   entryPoints: ["src/index.ts"],
   outdir: DIST_DIR,
   bundle: true,
-  packages: "external",
+  packages: "bundle",
   minify: true,
   sourcemap: "linked",
 };

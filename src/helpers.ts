@@ -1,5 +1,5 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
-import { decode as decodeNip19 } from "nostr-tools/nip19";
+import * as nip19 from "nostr-tools/nip19";
 
 const regexHexKey = /^[0-9a-f]{64}$/;
 
@@ -9,7 +9,7 @@ const regexHexKey = /^[0-9a-f]{64}$/;
  */
 export const parseSecKey = (secKey: string): { hex: string; bytes: Uint8Array } | undefined => {
   if (secKey.startsWith("nsec1")) {
-    const bytes = decodeNip19(secKey as `nsec1${string}`).data;
+    const bytes = nip19.decode(secKey as `nsec1${string}`).data;
     return {
       hex: bytesToHex(bytes),
       bytes,
@@ -30,7 +30,7 @@ export const parseSecKey = (secKey: string): { hex: string; bytes: Uint8Array } 
  */
 export const parsePubkey = (pubkey: string): string | undefined => {
   if (pubkey.startsWith("npub1")) {
-    return decodeNip19(pubkey as `npub1${string}`).data;
+    return nip19.decode(pubkey as `npub1${string}`).data;
   }
   if (regexHexKey.test(pubkey)) {
     return pubkey;
