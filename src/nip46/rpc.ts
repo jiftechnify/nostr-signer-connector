@@ -16,9 +16,41 @@ export type Nip46RpcResp = {
   error?: string | undefined | null;
 };
 
-const parseRpcResp = async (ev: NostrEvent, signer: NostrSigner): Promise<Nip46RpcResp> => {
+type ParsedNip46RpcResp = { id: string } & (
+  | {
+      status: "ok";
+      result: string;
+    }
+  | {
+      status: "error";
+      error: string;
+    }
+  | {
+      status: "auth";
+      authUrl: string;
+    }
+  | {
+      status: "empty";
+    }
+);
+
+const parseNip46RpcResp = async (ev: NostrEvent, signer: NostrSigner): Promise<ParsedNip46RpcResp> => {
   const plainContent = await signer.nip04Decrypt(ev.pubkey, ev.content);
-  return JSON.parse(plainContent) as Nip46RpcResp;
+  const { id, result, error } = JSON.parse(plainContent) as Nip46RpcResp;
+
+  // there are cases that both `error` and `result` have values, so check error first
+  if (error != null) {
+    // if `result` is "auth_url", response should be regarded as an auth challenge.
+    // in this case, `error` points to a URL for user authentication.
+    if (result === "auth_url") {
+      return { id, status: "auth", authUrl: error };
+    }
+    return { id, status: "error", error };
+  }
+  if (result != null) {
+    return { id, status: "ok", result };
+  }
+  return { id, status: "empty" };
 };
 
 type Nip46RpcSignatures = {
@@ -111,54 +143,55 @@ export class Nip46RpcClient {
     localSigner: SecretKeySigner,
     relayPool: RelayPool,
     secret: string,
-  ): { respReceived: Promise<string>; cancel: () => void } {
-    const respReceived = new Deferred<string>();
+  ): { connected: Promise<string>; cancel: () => void } {
+    const respWait = new Deferred<string>();
 
     const onEvent = async (ev: NostrEvent) => {
-      try {
-        const resp = await parseRpcResp(ev, localSigner);
-        if (resp.error) {
-          respReceived.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
+      const resp = await parseNip46RpcResp(ev, localSigner);
+      switch (resp.status) {
+        case "ok": {
+          const signerPubkey = ev.pubkey;
+          if (resp.result === "ack") {
+            // TODO: approve "ack" for now, but should be rejected in the future
+            console.warn("NIP-46 RPC: remote signer respondeds with just 'ack'");
+            respWait.resolve(signerPubkey);
+            return;
+          }
+          if (resp.result !== secret) {
+            respWait.reject(new Error("NIP-46 RPC: secret mismatch"));
+            return;
+          }
+          // secret returned from the remote siner matches with the one in connection token!
+          respWait.resolve(signerPubkey);
           return;
         }
-        if (!resp.result) {
-          respReceived.reject(new Error("NIP-46 RPC: empty response"));
+        case "auth":
+          console.debug("ignoring auth challenge...");
           return;
-        }
-
-        const signerPubkey = ev.pubkey;
-        if (resp.result === "ack") {
-          // TODO: approve "ack" for now, but should be rejected in the future
-          console.warn("NIP-46 RPC: remote signer respondeds with just 'ack'");
-          respReceived.resolve(signerPubkey);
+        case "error":
+          respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
           return;
-        }
-
-        if (resp.result !== secret) {
-          respReceived.reject(new Error("NIP-46 RPC: secret mismatch"));
+        case "empty":
+          respWait.reject(new Error("NIP-46 RPC: empty response"));
           return;
-        }
-        // secret returned from the remote siner matches with the one in connection token!
-        respReceived.resolve(signerPubkey);
-      } finally {
-        closeListenSub();
       }
     };
+
+    const unsub = relayPool.subscribe({ kinds: [24133], "#p": [localSigner.publicKey] }, onEvent);
 
     const ac = new AbortController();
     const cancel = () => ac.abort();
 
-    const closeListenSub = relayPool.subscribe({ kinds: [24133], "#p": [localSigner.publicKey] }, onEvent);
     ac.signal.addEventListener(
       "abort",
       async () => {
-        respReceived.reject(new Error("cancelled waiting for a connect response from a remote signer"));
-        closeListenSub();
+        respWait.reject(new Error("cancelled waiting for a connect response from a remote signer"));
       },
       { once: true },
     );
 
-    return { respReceived: respReceived.promise, cancel };
+    // unsubscribe when some response (other than auth_url) is received from the remote signer, or connection is cancelled
+    return { connected: respWait.promise.finally(unsub), cancel };
   }
 
   /**
@@ -188,7 +221,7 @@ export class Nip46RpcClient {
     const onevent = async (ev: NostrEvent) => {
       let rpcId: string | undefined;
       try {
-        const resp = await parseRpcResp(ev, this.#localSigner);
+        const resp = await parseNip46RpcResp(ev, this.#localSigner);
         rpcId = resp.id;
 
         const respWait = this.#inflightRpcs.get(resp.id);
@@ -197,13 +230,19 @@ export class Nip46RpcClient {
           return;
         }
 
-        // there are cases that both `error` and `result` have values, so check error first
-        if (resp.error) {
-          respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
-        } else if (resp.result) {
-          respWait.resolve(resp.result);
-        } else {
-          respWait.reject(new Error("NIP-46 RPC: empty response"));
+        switch (resp.status) {
+          case "ok":
+            respWait.resolve(resp.result);
+            return;
+          case "auth":
+            console.debug("NIP-46 RPC: ignoring auth challenge...");
+            return;
+          case "error":
+            respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
+            return;
+          case "empty":
+            respWait.reject(new Error("NIP-46 RPC: empty response"));
+            return;
         }
       } catch (err) {
         console.error("error on receiving NIP-46 RPC response", err);

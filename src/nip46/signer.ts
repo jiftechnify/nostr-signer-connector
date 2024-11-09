@@ -101,8 +101,6 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     relayUrls: string[],
     operationTimeoutMs: number,
   ): Promise<Nip46RemoteSigner> {
-    // const relayUrlsOrDefault = relayUrls ? relayUrls : defaultNip46Relays;
-
     let relayPool: RelayPool | undefined;
     try {
       relayPool = new RxNostrRelayPool(relayUrls);
@@ -225,21 +223,23 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     connUri.searchParams.set("metadata", JSON.stringify(metaWithPerms));
     connUri.searchParams.set("secret", connSecret);
 
+    // start listening for `connect` response from the remote signer
     const relayPool = new RxNostrRelayPool(relayUrls);
-    const { respReceived, cancel } = Nip46RpcClient.startWaitingForConnectRespFromRemote(
+    const { connected, cancel } = Nip46RpcClient.startWaitingForConnectRespFromRemote(
       localSigner,
       relayPool,
       connSecret,
     );
 
-    const established = respReceived.then(async (signerPubkey): Promise<StartSessionResult> => {
-      const rpcCli = await Nip46RpcClient.init(localSigner, signerPubkey, relayPool);
-      const signer = new Nip46RemoteSigner(rpcCli, signerPubkey, operationTimeoutMs);
+    // once `connect` response is received, initialize a handle for the remote signer
+    const established = connected.then(async (remotePubkey): Promise<StartSessionResult> => {
+      const rpcCli = await Nip46RpcClient.init(localSigner, remotePubkey, relayPool);
+      const signer = new Nip46RemoteSigner(rpcCli, remotePubkey, operationTimeoutMs);
       return {
         signer,
         session: {
           sessionKey,
-          remotePubkey: signerPubkey,
+          remotePubkey,
           relayUrls,
         },
       };
