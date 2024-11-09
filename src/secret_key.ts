@@ -1,6 +1,6 @@
 import { bytesToHex } from "@noble/hashes/utils";
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { finalizeEvent, generateSecretKey, getPublicKey as nostrToolsGetPubkey } from "nostr-tools";
+import { finalizeEvent, generateSecretKey, getPublicKey as pubkeyFromSeckeyBytes } from "nostr-tools";
 import * as nip04 from "nostr-tools/nip04";
 import * as nip44 from "nostr-tools/nip44";
 import { parseSecKey } from "./helpers";
@@ -15,8 +15,8 @@ import type { NostrSigner, RelayList } from "./interface";
  * - via `SecretKeySigner.withRandomKey()`, to make a signer with a random key.
  */
 export class SecretKeySigner implements NostrSigner {
-  #secKeyHex: string;
-  #secKeyBytes: Uint8Array;
+  #seckeyHex: string;
+  #seckeyBytes: Uint8Array;
 
   /**
    * Creates a SecretKeySigner from a secret key in hex string or bech32 (`nsec1...`) format.
@@ -38,15 +38,15 @@ export class SecretKeySigner implements NostrSigner {
       if (res === undefined) {
         throw Error("SecretKeySigner: constructor got an invalid secret key");
       }
-      this.#secKeyHex = res.hex;
-      this.#secKeyBytes = res.bytes;
+      this.#seckeyHex = res.hex;
+      this.#seckeyBytes = res.bytes;
     } else {
       // secret key must be 32 bytes length.
       if (secKey.length !== 32) {
         throw Error("SecretKeySigner: constructor got an invalid secret key");
       }
-      this.#secKeyBytes = secKey;
-      this.#secKeyHex = bytesToHex(secKey);
+      this.#seckeyBytes = secKey;
+      this.#seckeyHex = bytesToHex(secKey);
     }
   }
 
@@ -61,14 +61,14 @@ export class SecretKeySigner implements NostrSigner {
    * Returns the underlying secret key in hex string format.
    */
   public get secretKey(): string {
-    return this.#secKeyHex;
+    return this.#seckeyHex;
   }
 
   /**
    * Returns the public key that corresponds to the underlying secret key, in hex string format.
    */
   public get publicKey(): string {
-    return nostrToolsGetPubkey(this.#secKeyBytes);
+    return pubkeyFromSeckeyBytes(this.#seckeyBytes);
   }
 
   /**
@@ -94,7 +94,7 @@ export class SecretKeySigner implements NostrSigner {
    * @returns a Promise that resolves to a signed Nostr event
    */
   public async signEvent(event: NostrEventTemplate): Promise<NostrEvent> {
-    return Promise.resolve(finalizeEvent(event, this.#secKeyBytes));
+    return Promise.resolve(finalizeEvent(event, this.#seckeyBytes));
   }
 
   /**
@@ -105,7 +105,7 @@ export class SecretKeySigner implements NostrSigner {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    return nip04.encrypt(this.#secKeyHex, recipientPubkey, plaintext);
+    return nip04.encrypt(this.#seckeyHex, recipientPubkey, plaintext);
   }
 
   /**
@@ -116,7 +116,7 @@ export class SecretKeySigner implements NostrSigner {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    return nip04.decrypt(this.#secKeyHex, senderPubkey, ciphertext);
+    return nip04.decrypt(this.#seckeyHex, senderPubkey, ciphertext);
   }
 
   /**
@@ -127,7 +127,7 @@ export class SecretKeySigner implements NostrSigner {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    const convKey = nip44.v2.utils.getConversationKey(this.#secKeyBytes, recipientPubkey);
+    const convKey = nip44.v2.utils.getConversationKey(this.#seckeyBytes, recipientPubkey);
     return nip44.v2.encrypt(plaintext, convKey);
   }
 
@@ -139,7 +139,7 @@ export class SecretKeySigner implements NostrSigner {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    const convkey = nip44.v2.utils.getConversationKey(this.#secKeyBytes, senderPubkey);
+    const convkey = nip44.v2.utils.getConversationKey(this.#seckeyBytes, senderPubkey);
     return nip44.v2.decrypt(ciphertext, convkey);
   }
 }
