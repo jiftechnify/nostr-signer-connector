@@ -1,6 +1,5 @@
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { decode as decodeNip19 } from "nostr-tools/nip19";
-import type { NostrSigner } from "./interface";
 
 const regexHexKey = /^[0-9a-f]{64}$/;
 
@@ -37,18 +36,6 @@ export const parsePubkey = (pubkey: string): string | undefined => {
     return pubkey;
   }
   return undefined;
-};
-
-/**
- * Detects encryption algorithm (NIP-04 or NIP-44) of the ciphertext smartly, then decrypts it with corresponding decryption algorithm.
- */
-export const smartDecrypt = (signer: NostrSigner, senderPubkey: string, ciphertext: string): Promise<string> => {
-  const lastPart = ciphertext.split("?iv=").at(-1);
-  if (lastPart !== undefined && lastPart.length === 24) {
-    // ciphertext has an IV part, so assuming it's NIP-04 encrypted
-    return signer.nip04Decrypt(senderPubkey, ciphertext);
-  }
-  return signer.nip44Decrypt(senderPubkey, ciphertext);
 };
 
 /**
