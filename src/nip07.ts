@@ -17,7 +17,7 @@ export type Nip07Extension = {
 /**
  * An implementation of NostrSigner based on a [NIP-07](https://github.com/nostr-protocol/nips/blob/master/07.md) browser extension.
  *
- * NOTE: `nip04Encrypt` and `nip04Decrypt` throws error if the underlying NIP-07 extension doesn't support the NIP-04 capabilities.
+ * NOTE: `nip04/nip44`-`Encrypt/Decrypt` methods throw error if the underlying NIP-07 extension doesn't support them.
  */
 export class Nip07ExtensionSigner implements NostrSigner {
   #nip07Ext: Nip07Extension;

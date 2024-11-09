@@ -1,5 +1,5 @@
 import type { NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
-import { Deferred, currentUnixtimeSec, generateRandomString } from "../helpers";
+import { Deferred, currentUnixtimeSec, generateRandomString, mergeOptionsWithDefaults } from "../helpers";
 import type { NostrSigner } from "../interface";
 import type { SecretKeySigner } from "../secret_key";
 import type { RelayPool } from "./relay_pool";
@@ -35,7 +35,7 @@ type ParsedNip46RpcResp = { id: string } & (
 );
 
 const parseNip46RpcResp = async (ev: NostrEvent, signer: NostrSigner): Promise<ParsedNip46RpcResp> => {
-  const plainContent = await signer.nip04Decrypt(ev.pubkey, ev.content);
+  const plainContent = await smartDecrypt(signer, ev.pubkey, ev.content);
   const { id, result, error } = JSON.parse(plainContent) as Nip46RpcResp;
 
   // there are cases that both `error` and `result` have values, so check error first
@@ -121,22 +121,83 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   ping: identity,
 };
 
-type Nip46RpcClientOptions = {
-  onAuthChallenge: (authUrl: string) => void;
-  requestTimeoutMs: number;
+/**
+ * Specifier of the algorithm to use for encrypting request payloads to remote signer.
+ */
+export type Nip46RpcEncryptionAlgorithm = "nip04" | "nip44";
+
+// Detects encryption algorithm (NIP-04 or NIP-44) of the ciphertext smartly, then decrypts it with corresponding decryption algorithm.
+const smartDecrypt = (signer: NostrSigner, senderPubkey: string, ciphertext: string): Promise<string> => {
+  const lastPart = ciphertext.split("?iv=").at(-1);
+  if (lastPart !== undefined && lastPart.length === 24) {
+    // ciphertext has an IV part, so assuming it's NIP-04 encrypted
+    return signer.nip04Decrypt(senderPubkey, ciphertext);
+  }
+  return signer.nip44Decrypt(senderPubkey, ciphertext);
+};
+
+// encrypt plaintext using specified algorithm (NIP-04 or NIP-44)
+const encryptWithAlgo = (
+  signer: NostrSigner,
+  algo: Nip46RpcEncryptionAlgorithm,
+  recipientPubkey: string,
+  plaintext: string,
+): Promise<string> => {
+  switch (algo) {
+    case "nip04":
+      return signer.nip04Encrypt(recipientPubkey, plaintext);
+    case "nip44":
+      return signer.nip44Encrypt(recipientPubkey, plaintext);
+  }
+};
+
+export type Nip46RpcClientOptions = {
+  /**
+   * The maximum amount of time to wait for a response to a signer operation request, in milliseconds.
+   *
+   * @default 15000
+   */
+  requestTimeoutMs?: number;
+
+  /**
+   * The handler for auth challenge from a remote signer.
+   *
+   * Default is just ignoring any auth challenges.
+   */
+  onAuthChallenge?: (authUrl: string) => void;
+
+  /**
+   * The algorithm to use for encrypting request payloads to remote signer.
+   *
+   * @default "nip04"
+   */
+  encryptionAlgorithm?: Nip46RpcEncryptionAlgorithm;
+};
+
+export const defaultRpcCliOptions: Required<Nip46RpcClientOptions> = {
+  requestTimeoutMs: 15 * 1000,
+  onAuthChallenge: (_) => {
+    console.debug("NIP-46 RPC: ignoring auth challenge...");
+  },
+  encryptionAlgorithm: "nip04",
 };
 
 export class Nip46RpcClient {
   #localSigner: NostrSigner;
   #remotePubkey: string;
-  #options: Nip46RpcClientOptions;
+  #options: Required<Nip46RpcClientOptions>;
 
   #relayPool: RelayPool;
   #closeSub: (() => void) | undefined = undefined;
 
   #inflightRpcs: Map<string, Deferred<string>> = new Map();
 
-  constructor(localSigner: NostrSigner, remotePubkey: string, relayPool: RelayPool, options: Nip46RpcClientOptions) {
+  constructor(
+    localSigner: NostrSigner,
+    remotePubkey: string,
+    relayPool: RelayPool,
+    options: Required<Nip46RpcClientOptions>,
+  ) {
     this.#localSigner = localSigner;
     this.#remotePubkey = remotePubkey;
     this.#options = options;
@@ -212,9 +273,11 @@ export class Nip46RpcClient {
     relayPool: RelayPool,
     options: Nip46RpcClientOptions,
   ): Promise<Nip46RpcClient> {
+    const finalOpts = mergeOptionsWithDefaults(defaultRpcCliOptions, options);
+
     let rpcCli: Nip46RpcClient | undefined;
     try {
-      rpcCli = new Nip46RpcClient(localSigner, remotePubkey, relayPool, options);
+      rpcCli = new Nip46RpcClient(localSigner, remotePubkey, relayPool, finalOpts);
       await rpcCli.#startRespSubscription();
       return rpcCli;
     } catch (e) {
@@ -224,8 +287,6 @@ export class Nip46RpcClient {
   }
 
   async #startRespSubscription() {
-    const localPubkey = await this.#localSigner.getPublicKey();
-
     const onevent = async (ev: NostrEvent) => {
       let rpcId: string | undefined;
       try {
@@ -260,6 +321,8 @@ export class Nip46RpcClient {
         this.#inflightRpcs.delete(rpcId);
       }
     };
+
+    const localPubkey = await this.#localSigner.getPublicKey();
     this.#closeSub = this.#relayPool.subscribe({ kinds: [24133], "#p": [localPubkey] }, onevent);
   }
 
@@ -298,7 +361,12 @@ export class Nip46RpcClient {
       method,
       params: nip46RpcParamsEncoders[method](params),
     };
-    const cipheredReq = await this.#localSigner.nip04Encrypt(this.#remotePubkey, JSON.stringify(rpcReq));
+    const cipheredReq = await encryptWithAlgo(
+      this.#localSigner,
+      this.#options.encryptionAlgorithm,
+      this.#remotePubkey,
+      JSON.stringify(rpcReq),
+    );
     const reqEv: NostrEventTemplate = {
       kind: 24133,
       tags: [["p", this.#remotePubkey]],

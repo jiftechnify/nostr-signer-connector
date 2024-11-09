@@ -4,7 +4,7 @@ import { generateRandomString, mergeOptionsWithDefaults, parsePubkey } from "../
 import type { NostrSigner } from "../interface";
 import { SecretKeySigner } from "../secret_key";
 import { type RelayPool, RxNostrRelayPool } from "./relay_pool";
-import { Nip46RpcClient } from "./rpc";
+import { Nip46RpcClient, type Nip46RpcClientOptions, defaultRpcCliOptions } from "./rpc";
 
 export type Nip46ConnectionParams = {
   remotePubkey: string;
@@ -67,24 +67,7 @@ export type Nip46ClientMetadata = {
   icons?: string[];
 };
 
-/**
- * Options for NIP-46 remote signer.
- */
-export type Nip46RemoteSignerOptions = {
-  /**
-   * The maximum amount of time to wait for a response to a signer operation request, in milliseconds.
-   *
-   * @default 15000
-   */
-  requestTimeoutMs?: number;
-
-  /**
-   * The handler for auth challenge from a remote signer.
-   *
-   * Default is just ignoring any auth challenges.
-   */
-  onAuthChallenge?: (authUrl: string) => void;
-};
+export type Nip46RemoteSignerOptions = Nip46RpcClientOptions;
 
 export type Nip46RemoteSignerConnectOptions = Nip46RemoteSignerOptions & {
   /**
@@ -100,15 +83,8 @@ export type Nip46RemoteSignerConnectOptions = Nip46RemoteSignerOptions & {
   permissions?: string[];
 };
 
-const defaultOptions: Required<Nip46RemoteSignerOptions> = {
-  requestTimeoutMs: 15 * 1000,
-  onAuthChallenge: (_) => {
-    console.debug("NIP-46 RPC: ignoring auth challenge...");
-  },
-};
-
 const defaultConnectOptions: Required<Nip46RemoteSignerConnectOptions> = {
-  ...defaultOptions,
+  ...defaultRpcCliOptions,
   connectTimeoutMs: 30 * 1000,
   permissions: [],
 };
@@ -302,7 +278,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     { sessionKey, ...connParams }: Nip46SessionState,
     options: Nip46RemoteSignerOptions = {},
   ): Promise<Nip46RemoteSigner> {
-    const finalOpts = mergeOptionsWithDefaults(defaultOptions, options);
+    const finalOpts = mergeOptionsWithDefaults(defaultRpcCliOptions, options);
 
     const localSigner = new SecretKeySigner(sessionKey);
     return Nip46RemoteSigner.#init(localSigner, connParams.remotePubkey, connParams.relayUrls, finalOpts);
