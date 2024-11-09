@@ -31,7 +31,7 @@
   "dependencies": {
     "@noble/hashes": "1.5.0",
     "nostr-tools": "2.10.1",
-    "rx-nostr": "^2.4.1"
+    "rx-nostr": "^3.4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
