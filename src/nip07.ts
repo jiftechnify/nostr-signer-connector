@@ -1,4 +1,5 @@
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
+import { Deferred, mergeOptionsWithDefaults } from "./helpers";
 import type { NostrSigner, RelayList } from "./interface";
 
 export type Nip07Extension = {
@@ -15,6 +16,22 @@ export type Nip07Extension = {
   };
 };
 
+export type Nip07ExtensionSignerOptions = {
+  /**
+   * Enables the request queueing.
+   * Under the request queueing, you can still call methods concurrently, though actually only a single request is executed at a point in time.
+   *
+   * This is useful when the NIP-07 extension you use can't process concurrent requests correctly.
+   *
+   * @default false
+   */
+  enableQueueing?: boolean;
+};
+
+const defaultOptions: Required<Nip07ExtensionSignerOptions> = {
+  enableQueueing: false,
+};
+
 /**
  * An implementation of NostrSigner based on a [NIP-07](https://github.com/nostr-protocol/nips/blob/master/07.md) browser extension.
  *
@@ -22,21 +39,29 @@ export type Nip07Extension = {
  */
 export class Nip07ExtensionSigner implements NostrSigner {
   #nip07Ext: Nip07Extension;
+  #reqSerializer: RequestSerializer;
 
   /**
    * Creates a Nip07ExtensionSigner from an instance of NIP-07 browser extension.
    *
    * @param nip07Ext an instance of NIP-07 extension (`window.nostr`)
    */
-  public constructor(nip07Ext: Nip07Extension) {
+  public constructor(nip07Ext: Nip07Extension, options: Nip07ExtensionSignerOptions = {}) {
     this.#nip07Ext = nip07Ext;
+
+    const { enableQueueing } = mergeOptionsWithDefaults(defaultOptions, options);
+    if (enableQueueing) {
+      this.#reqSerializer = new ReqSerializationQueue();
+    } else {
+      this.#reqSerializer = new NoopReqSerializer();
+    }
   }
 
   /**
    * Returns the public key that corresponds to the underlying secret key, in hex string format.
    */
   public async getPublicKey(): Promise<string> {
-    return this.#nip07Ext.getPublicKey();
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.getPublicKey());
   }
 
   /**
@@ -48,7 +73,8 @@ export class Nip07ExtensionSigner implements NostrSigner {
     if (typeof this.#nip07Ext.getRelays !== "function") {
       throw Error("NIP-07 browser extension doesn't support getRelays");
     }
-    return this.#nip07Ext.getRelays();
+    // biome-ignore lint/style/noNonNullAssertion: extension's field existence hardly changes during runtime
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.getRelays!());
   }
 
   /**
@@ -58,7 +84,7 @@ export class Nip07ExtensionSigner implements NostrSigner {
    * @returns a Promise that resolves to a signed Nostr event
    */
   public async signEvent(event: NostrEventTemplate): Promise<NostrEvent> {
-    return this.#nip07Ext.signEvent(event);
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.signEvent(event));
   }
 
   /**
@@ -72,7 +98,8 @@ export class Nip07ExtensionSigner implements NostrSigner {
     if (typeof this.#nip07Ext.nip04?.encrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip04.encrypt");
     }
-    return this.#nip07Ext.nip04.encrypt(recipientPubkey, plaintext);
+    // biome-ignore lint/style/noNonNullAssertion: extension's field existence hardly changes during runtime
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.nip04!.encrypt!(recipientPubkey, plaintext));
   }
 
   /**
@@ -86,7 +113,8 @@ export class Nip07ExtensionSigner implements NostrSigner {
     if (typeof this.#nip07Ext.nip04?.decrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip04.decrypt");
     }
-    return this.#nip07Ext.nip04.decrypt(senderPubkey, ciphertext);
+    // biome-ignore lint/style/noNonNullAssertion: extension's field existence hardly changes during runtime
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.nip04!.decrypt!(senderPubkey, ciphertext));
   }
 
   /**
@@ -100,7 +128,8 @@ export class Nip07ExtensionSigner implements NostrSigner {
     if (typeof this.#nip07Ext.nip44?.encrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip44.encrypt");
     }
-    return this.#nip07Ext.nip44.encrypt(recipientPubkey, plaintext);
+    // biome-ignore lint/style/noNonNullAssertion: extension's field existence hardly changes during runtime
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.nip44!.encrypt!(recipientPubkey, plaintext));
   }
 
   /**
@@ -114,6 +143,55 @@ export class Nip07ExtensionSigner implements NostrSigner {
     if (typeof this.#nip07Ext.nip44?.decrypt !== "function") {
       throw Error("NIP-07 browser extension doesn't support nip44.decrypt");
     }
-    return this.#nip07Ext.nip44.decrypt(senderPubkey, ciphertext);
+    // biome-ignore lint/style/noNonNullAssertion: extension's field existence hardly changes during runtime
+    return this.#reqSerializer.addRequest(() => this.#nip07Ext.nip44!.decrypt!(senderPubkey, ciphertext));
+  }
+}
+
+interface RequestSerializer {
+  addRequest<T>(req: () => Promise<T>): Promise<T>;
+}
+
+class ReqSerializationQueue implements RequestSerializer {
+  #reqQ: (() => Promise<unknown>)[] = [];
+  #running = false;
+
+  public addRequest<T>(req: () => Promise<T>): Promise<T> {
+    const d = new Deferred<T>();
+    const r = async () => {
+      try {
+        d.resolve(await req());
+      } catch (err) {
+        d.reject(err);
+      }
+    };
+    this.#reqQ.push(r);
+
+    if (!this.#running) {
+      this.#running = true;
+      this.startLoop();
+    }
+
+    return d.promise;
+  }
+
+  private async startLoop() {
+    try {
+      while (true) {
+        const req = this.#reqQ.shift();
+        if (req === undefined) {
+          break;
+        }
+        await req();
+      }
+    } finally {
+      this.#running = false;
+    }
+  }
+}
+
+class NoopReqSerializer implements RequestSerializer {
+  public addRequest<T>(req: () => Promise<T>): Promise<T> {
+    return req();
   }
 }
