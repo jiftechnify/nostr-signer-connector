@@ -1,6 +1,6 @@
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import { getPublicKey as getPubkeyFromHex } from "rx-nostr";
-import { generateRandomString, parsePubkey } from "../helpers";
+import { generateRandomString, mergeOptionsWithDefaults, parsePubkey } from "../helpers";
 import type { NostrSigner } from "../interface";
 import { SecretKeySigner } from "../secret_key";
 import { type RelayPool, RxNostrRelayPool } from "./relay_pool";
@@ -68,6 +68,52 @@ export type Nip46ClientMetadata = {
 };
 
 /**
+ * Options for NIP-46 remote signer.
+ */
+export type Nip46RemoteSignerOptions = {
+  /**
+   * The maximum amount of time to wait for a response to a signer operation request, in milliseconds.
+   *
+   * @default 15000
+   */
+  requestTimeoutMs?: number;
+
+  /**
+   * The handler for auth challenge from a remote signer.
+   *
+   * Default is just ignoring any auth challenges.
+   */
+  onAuthChallenge?: (authUrl: string) => void;
+};
+
+export type Nip46RemoteSignerConnectOptions = Nip46RemoteSignerOptions & {
+  /**
+   * The maximum amount of time allowed to attempt to connect to a remote signer, in milliseconds.
+   *
+   * @default 30000
+   */
+  connectTimeoutMs?: number;
+
+  /**
+   * The permissions to request on the connection.
+   */
+  permissions?: string[];
+};
+
+const defaultOptions: Required<Nip46RemoteSignerOptions> = {
+  requestTimeoutMs: 15 * 1000,
+  onAuthChallenge: (_) => {
+    console.debug("NIP-46 RPC: ignoring auth challenge...");
+  },
+};
+
+const defaultConnectOptions: Required<Nip46RemoteSignerConnectOptions> = {
+  ...defaultOptions,
+  connectTimeoutMs: 30 * 1000,
+  permissions: [],
+};
+
+/**
  * An implementation of NostrSigner based on a [NIP-46](https://github.com/nostr-protocol/nips/blob/master/46.md) remote signer (a.k.a. Nostr Connect or nsecBunker).
  * It acts as a client-side handle for a NIP-46 remote signer.
  *
@@ -82,12 +128,10 @@ export type Nip46ClientMetadata = {
 export class Nip46RemoteSigner implements NostrSigner, Disposable {
   #rpcCli: Nip46RpcClient;
   #remotePubkey: string;
-  #opTimeoutMs: number;
 
-  private constructor(rpcCli: Nip46RpcClient, remotePubkey: string, opTimeoutMs: number) {
+  private constructor(rpcCli: Nip46RpcClient, remotePubkey: string) {
     this.#rpcCli = rpcCli;
     this.#remotePubkey = remotePubkey;
-    this.#opTimeoutMs = opTimeoutMs;
   }
 
   /**
@@ -99,7 +143,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     localSigner: NostrSigner,
     remotePubkey: string,
     relayUrls: string[],
-    operationTimeoutMs: number,
+    options: Required<Nip46RemoteSignerOptions>,
   ): Promise<Nip46RemoteSigner> {
     let relayPool: RelayPool | undefined;
     try {
@@ -109,8 +153,8 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       throw e;
     }
 
-    const rpcCli = await Nip46RpcClient.init(localSigner, remotePubkey, relayPool);
-    return new Nip46RemoteSigner(rpcCli, remotePubkey, operationTimeoutMs);
+    const rpcCli = await Nip46RpcClient.init(localSigner, remotePubkey, relayPool, options);
+    return new Nip46RemoteSigner(rpcCli, remotePubkey);
   }
 
   /**
@@ -121,10 +165,9 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
   static async #connect(
     localSigner: NostrSigner,
     { remotePubkey, secretToken, relayUrls }: Nip46ConnectionParams,
-    permissions: string[],
-    operationTimeoutMs: number,
+    options: Required<Nip46RemoteSignerConnectOptions>,
   ): Promise<Nip46RemoteSigner> {
-    const signer = await Nip46RemoteSigner.#init(localSigner, remotePubkey, relayUrls, operationTimeoutMs);
+    const signer = await Nip46RemoteSigner.#init(localSigner, remotePubkey, relayUrls, options);
 
     // perform connection handshake
     try {
@@ -132,11 +175,11 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
       if (secretToken !== undefined) {
         connParams.push(secretToken);
       }
-      if (permissions.length > 0) {
-        connParams.push(permissions.join(","));
+      if (options.permissions.length > 0) {
+        connParams.push(options.permissions.join(","));
       }
 
-      const connResp = await signer.#rpcCli.request("connect", connParams, operationTimeoutMs);
+      const connResp = await signer.#rpcCli.request("connect", connParams, options.connectTimeoutMs);
       if (connResp !== "ack") {
         console.warn("NIP-46 remote signer responded for `connect` with other than 'ack'");
       }
@@ -166,15 +209,16 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    */
   public static async connectToRemote(
     connToken: string,
-    permissions: string[] = [],
-    operationTimeoutMs = 15 * 1000,
+    options: Nip46RemoteSignerConnectOptions = {},
   ): Promise<StartSessionResult> {
+    const finalOpts = mergeOptionsWithDefaults(defaultConnectOptions, options);
+
     const connParams = parseConnToken(connToken);
     const localSigner = SecretKeySigner.withRandomKey();
     const sessionKey = localSigner.secretKey;
 
     return {
-      signer: await Nip46RemoteSigner.#connect(localSigner, connParams, permissions, operationTimeoutMs),
+      signer: await Nip46RemoteSigner.#connect(localSigner, connParams, finalOpts),
       session: {
         sessionKey,
         ...connParams,
@@ -193,18 +237,17 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns an object with following properties:
    *  - `connectUri`: a URI that can be shared with the remote signer to connect to this client
    *  - `established`: a Promise that resolves to an object that contains a handle for the connected remote signer and a session state
-   *  - `cancel`: a function that cancels listening connection from a remote signer
    */
   public static listenConnectionFromRemote(
     relayUrls: string[],
     clientMetadata: Nip46ClientMetadata,
-    permissions: string[] = [],
-    operationTimeoutMs = 15 * 1000,
+    options: Nip46RemoteSignerConnectOptions = {},
   ): {
     connectUri: string;
     established: Promise<StartSessionResult>;
-    cancel: () => void;
   } {
+    const finalOpts = mergeOptionsWithDefaults(defaultConnectOptions, options);
+
     const localSigner = SecretKeySigner.withRandomKey();
     const sessionKey = localSigner.secretKey;
     const localPubkey = getPubkeyFromHex(sessionKey);
@@ -215,26 +258,27 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     for (const rurl of relayUrls) {
       connUri.searchParams.append("relay", rurl);
     }
-
     const metaWithPerms = {
       ...clientMetadata,
-      perms: permissions.length > 0 ? permissions.join(",") : undefined,
+      perms: finalOpts.permissions.length > 0 ? finalOpts.permissions.join(",") : undefined,
     };
     connUri.searchParams.set("metadata", JSON.stringify(metaWithPerms));
     connUri.searchParams.set("secret", connSecret);
 
     // start listening for `connect` response from the remote signer
     const relayPool = new RxNostrRelayPool(relayUrls);
-    const { connected, cancel } = Nip46RpcClient.startWaitingForConnectRespFromRemote(
+
+    const { connected } = Nip46RpcClient.startWaitingForConnectRespFromRemote(
       localSigner,
       relayPool,
       connSecret,
+      finalOpts.connectTimeoutMs,
     );
 
     // once `connect` response is received, initialize a handle for the remote signer
     const established = connected.then(async (remotePubkey): Promise<StartSessionResult> => {
-      const rpcCli = await Nip46RpcClient.init(localSigner, remotePubkey, relayPool);
-      const signer = new Nip46RemoteSigner(rpcCli, remotePubkey, operationTimeoutMs);
+      const rpcCli = await Nip46RpcClient.init(localSigner, remotePubkey, relayPool, finalOpts);
+      const signer = new Nip46RemoteSigner(rpcCli, remotePubkey);
       return {
         signer,
         session: {
@@ -248,7 +292,6 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     return {
       connectUri: connUri.toString(),
       established,
-      cancel,
     };
   }
 
@@ -257,17 +300,19 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    */
   public static async resumeSession(
     { sessionKey, ...connParams }: Nip46SessionState,
-    operationTimeoutMs = 15 * 1000,
+    options: Nip46RemoteSignerOptions = {},
   ): Promise<Nip46RemoteSigner> {
+    const finalOpts = mergeOptionsWithDefaults(defaultOptions, options);
+
     const localSigner = new SecretKeySigner(sessionKey);
-    return Nip46RemoteSigner.#init(localSigner, connParams.remotePubkey, connParams.relayUrls, operationTimeoutMs);
+    return Nip46RemoteSigner.#init(localSigner, connParams.remotePubkey, connParams.relayUrls, finalOpts);
   }
 
   /**
    * Returns the public key that corresponds to the underlying secret key, in hex string format.
    */
   public async getPublicKey(): Promise<string> {
-    return this.#rpcCli.request("get_public_key", [], this.#opTimeoutMs);
+    return this.#rpcCli.request("get_public_key", []);
   }
 
   /**
@@ -282,7 +327,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
     if (!ev.pubkey) {
       ev.pubkey = this.#remotePubkey;
     }
-    return this.#rpcCli.request("sign_event", [ev], this.#opTimeoutMs);
+    return this.#rpcCli.request("sign_event", [ev]);
   }
 
   /**
@@ -293,7 +338,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip04Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    return this.#rpcCli.request("nip04_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip04_encrypt", [recipientPubkey, plaintext]);
   }
 
   /**
@@ -304,7 +349,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip04Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    return this.#rpcCli.request("nip04_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip04_decrypt", [senderPubkey, ciphertext]);
   }
 
   /**
@@ -315,7 +360,7 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a encrypted text
    */
   public async nip44Encrypt(recipientPubkey: string, plaintext: string): Promise<string> {
-    return this.#rpcCli.request("nip44_encrypt", [recipientPubkey, plaintext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip44_encrypt", [recipientPubkey, plaintext]);
   }
 
   /**
@@ -326,14 +371,14 @@ export class Nip46RemoteSigner implements NostrSigner, Disposable {
    * @returns a Promise that resolves to a decrypted text
    */
   public async nip44Decrypt(senderPubkey: string, ciphertext: string): Promise<string> {
-    return this.#rpcCli.request("nip44_decrypt", [senderPubkey, ciphertext], this.#opTimeoutMs);
+    return this.#rpcCli.request("nip44_decrypt", [senderPubkey, ciphertext]);
   }
 
   /**
    * Sends a ping to the remote signer.
    */
   public async ping(): Promise<void> {
-    const resp = await this.#rpcCli.request("ping", [], this.#opTimeoutMs);
+    const resp = await this.#rpcCli.request("ping", []);
     // response should be "pong"
     if (resp !== "pong") {
       throw Error("unexpected response for ping from the remote signer");

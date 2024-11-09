@@ -59,3 +59,5 @@ export class Deferred<T> {
 }
 
 export const delay = (durationMs: number) => new Promise((resolve) => setTimeout(resolve, durationMs));
+
+export const mergeOptionsWithDefaults = <T>(defaults: Required<T>, opts: T): Required<T> => ({ ...defaults, ...opts });

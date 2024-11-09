@@ -121,18 +121,25 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   ping: identity,
 };
 
+type Nip46RpcClientOptions = {
+  onAuthChallenge: (authUrl: string) => void;
+  requestTimeoutMs: number;
+};
+
 export class Nip46RpcClient {
   #localSigner: NostrSigner;
   #remotePubkey: string;
+  #options: Nip46RpcClientOptions;
 
   #relayPool: RelayPool;
   #closeSub: (() => void) | undefined = undefined;
 
   #inflightRpcs: Map<string, Deferred<string>> = new Map();
 
-  constructor(localSigner: NostrSigner, remotePubkey: string, relayPool: RelayPool) {
+  constructor(localSigner: NostrSigner, remotePubkey: string, relayPool: RelayPool, options: Nip46RpcClientOptions) {
     this.#localSigner = localSigner;
     this.#remotePubkey = remotePubkey;
+    this.#options = options;
     this.#relayPool = relayPool;
   }
 
@@ -143,7 +150,8 @@ export class Nip46RpcClient {
     localSigner: SecretKeySigner,
     relayPool: RelayPool,
     secret: string,
-  ): { connected: Promise<string>; cancel: () => void } {
+    timeoutMs: number,
+  ): { connected: Promise<string> } {
     const respWait = new Deferred<string>();
 
     const onEvent = async (ev: NostrEvent) => {
@@ -166,7 +174,7 @@ export class Nip46RpcClient {
           return;
         }
         case "auth":
-          console.debug("ignoring auth challenge...");
+          console.debug("NIP-46 RPC: ignoring auth challenge during waiting for connection from remote...");
           return;
         case "error":
           respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
@@ -177,21 +185,20 @@ export class Nip46RpcClient {
       }
     };
 
+    const timeoutSignal = AbortSignal.timeout(timeoutMs);
+    const onTimeout = async () => {
+      respWait.reject(new Error("NIP-46: nostrconnect connection initiation flow timed out!"));
+    };
+    timeoutSignal.addEventListener("abort", onTimeout, { once: true });
+
     const unsub = relayPool.subscribe({ kinds: [24133], "#p": [localSigner.publicKey] }, onEvent);
 
-    const ac = new AbortController();
-    const cancel = () => ac.abort();
-
-    ac.signal.addEventListener(
-      "abort",
-      async () => {
-        respWait.reject(new Error("cancelled waiting for a connect response from a remote signer"));
-      },
-      { once: true },
-    );
-
-    // unsubscribe when some response (other than auth_url) is received from the remote signer, or connection is cancelled
-    return { connected: respWait.promise.finally(unsub), cancel };
+    // cleanups to be performed on the settlement of `respWait`.
+    const cleanup = () => {
+      unsub();
+      timeoutSignal.removeEventListener("abort", onTimeout);
+    };
+    return { connected: respWait.promise.finally(cleanup) };
   }
 
   /**
@@ -203,10 +210,11 @@ export class Nip46RpcClient {
     localSigner: NostrSigner,
     remotePubkey: string,
     relayPool: RelayPool,
+    options: Nip46RpcClientOptions,
   ): Promise<Nip46RpcClient> {
     let rpcCli: Nip46RpcClient | undefined;
     try {
-      rpcCli = new Nip46RpcClient(localSigner, remotePubkey, relayPool);
+      rpcCli = new Nip46RpcClient(localSigner, remotePubkey, relayPool, options);
       await rpcCli.#startRespSubscription();
       return rpcCli;
     } catch (e) {
@@ -235,7 +243,7 @@ export class Nip46RpcClient {
             respWait.resolve(resp.result);
             return;
           case "auth":
-            console.debug("NIP-46 RPC: ignoring auth challenge...");
+            this.#options.onAuthChallenge(resp.authUrl);
             return;
           case "error":
             respWait.reject(new Error(`NIP-46 RPC resulted in error: ${resp.error}`));
@@ -280,7 +288,7 @@ export class Nip46RpcClient {
   public async request<M extends Nip46RpcMethods>(
     method: M,
     params: Nip46RpcParams<M>,
-    timeoutMs: number,
+    timeoutMs = this.#options.requestTimeoutMs,
   ): Promise<Nip46RpcResult<M>> {
     const rpcId = generateRandomString();
     const { waitResp, startCancelTimer } = this.#startWaitingRpcResp(rpcId);
