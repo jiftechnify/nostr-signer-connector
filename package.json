@@ -10,7 +10,10 @@
     "require": "./dist/index.cjs",
     "types": "./dist/index.d.ts"
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "repository": "ssh://git@github.com/jiftechnify/nostr-signer-connector.git",
   "author": "jiftechnify <jiftech.stlfy@gmail.com>",
   "license": "MIT",
@@ -31,7 +34,8 @@
   "dependencies": {
     "@noble/hashes": "1.5.0",
     "nostr-tools": "2.10.1",
-    "rx-nostr": "^3.4.0"
+    "rx-nostr": "^3.4.0",
+    "rx-nostr-crypto": "^3.1.2"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

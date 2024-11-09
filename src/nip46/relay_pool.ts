@@ -1,5 +1,6 @@
 import type { Filter, NostrEvent } from "nostr-tools";
 import { type RxNostr, createRxForwardReq, createRxNostr, uniq } from "rx-nostr";
+import { verifier } from "rx-nostr-crypto";
 import { currentUnixtimeSec, delay } from "../helpers";
 
 export type RelayPool = {
@@ -32,7 +33,7 @@ export class RxNostrRelayPool implements RelayPool {
   constructor(relayUrls: string[]) {
     this.#relayUrls = relayUrls;
 
-    const rxn = createRxNostr({ skipFetchNip11: true, connectionStrategy: "lazy-keep" });
+    const rxn = createRxNostr({ verifier, skipFetchNip11: true, connectionStrategy: "lazy-keep" });
     rxn.setDefaultRelays(relayUrls);
 
     rxn.createConnectionStateObservable().subscribe(({ from: rurl, state }) => {
