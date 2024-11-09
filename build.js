@@ -10,7 +10,7 @@ const sharedBuildOptions = {
   entryPoints: ["src/index.ts"],
   outdir: DIST_DIR,
   bundle: true,
-  packages: "external",
+  packages: "bundle",
   minify: true,
   sourcemap: "linked",
 };
