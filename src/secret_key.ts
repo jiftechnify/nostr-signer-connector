@@ -2,6 +2,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 import type { Event as NostrEvent, EventTemplate as NostrEventTemplate } from "nostr-tools";
 import * as nip04 from "nostr-tools/nip04";
 import * as nip44 from "nostr-tools/nip44";
+import * as nip49 from "nostr-tools/nip49";
 import { finalizeEvent, generateSecretKey, getPublicKey as pubkeyFromSeckeyBytes } from "nostr-tools/pure";
 import { parseSecKey } from "./helpers";
 import type { NostrSigner, RelayList } from "./interface";
@@ -9,9 +10,10 @@ import type { NostrSigner, RelayList } from "./interface";
 /**
  * An implementation of NostrSigner based on a bare secret key in memory.
  *
- * You can create a SecretKeySigner in two ways:
+ * You can create a SecretKeySigner in the following ways:
  *
  * - via the constructor (`new SecretKeySigner(key)`), from secret keys in hex string, bech32 (`nsec1...`) or binary format.
+ * - via `SecretKeySigner.fromEncryptedKey()`, from a NIP-49 encrypted secret key (`ncryptsec...`) and a password for it.
  * - via `SecretKeySigner.withRandomKey()`, to make a signer with a random key.
  */
 export class SecretKeySigner implements NostrSigner {
@@ -51,7 +53,17 @@ export class SecretKeySigner implements NostrSigner {
   }
 
   /**
-   * Makes a SecretKeySigner with a random secret key.
+   *  Creates a SecretKeySigner from a NIP-49 encrypted secret key (`ncryptsec...`) and a password.
+   *
+   * @param ncryptsec NIP-49 encrypted secret key
+   * @param password password to decrypt the secret key
+   */
+  public static fromEncryptedKey(ncryptsec: string, password: string) {
+    return new SecretKeySigner(nip49.decrypt(ncryptsec, password));
+  }
+
+  /**
+   * Creates a SecretKeySigner with a random secret key.
    */
   public static withRandomKey(): SecretKeySigner {
     return new SecretKeySigner(generateSecretKey());
