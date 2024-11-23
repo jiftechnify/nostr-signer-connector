@@ -10,7 +10,10 @@
     "import": "./dist/index.mjs",
     "require": "./dist/index.cjs"
   },
-  "files": ["dist", "src"],
+  "files": [
+    "dist",
+    "src"
+  ],
   "repository": "ssh://git@github.com/jiftechnify/nostr-signer-connector.git",
   "author": "jiftechnify <jiftech.stlfy@gmail.com>",
   "license": "MIT",
@@ -43,9 +46,9 @@
     "@types/fs-extra": "^11.0.4",
     "esbuild": "^0.24.0",
     "fs-extra": "^11.2.0",
-    "npm-run-all": "^4.1.5",
+    "npm-run-all2": "^7.0.1",
     "tsx": "^4.6.2",
     "typescript": "^5.3.3",
-    "vitest": "^1.1.0"
+    "vitest": "^2.1.5"
   }
 }
