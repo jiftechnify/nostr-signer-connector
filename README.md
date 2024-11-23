@@ -193,9 +193,7 @@ type NostrSigner = {
     /**
      * Returns the list of relays preferred by the user.
      */
-    getRelays(): Promise<
-        { [relayUrl: string]: { read: boolean; write: boolean } }
-    >;
+    getRelays(): Promise<{ [relayUrl: string]: { read: boolean; write: boolean } }>;
 
     /**
      * Signs a given Nostr event with the underlying secret key.
