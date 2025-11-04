@@ -8,5 +8,4 @@ export type {
   Nip46RemoteSignerOptions,
   Nip46RemoteSignerConnectOptions,
 } from "./nip46/signer";
-export type { Nip46RpcEncryptionAlgorithm } from "./nip46/rpc";
 export { SecretKeySigner } from "./secret_key";
