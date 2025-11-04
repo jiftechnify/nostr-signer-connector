@@ -127,11 +127,6 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   nip44_decrypt: identity,
 };
 
-/**
- * Specifier of the algorithm to use for encrypting request payloads to remote signer.
- */
-export type Nip46RpcEncryptionAlgorithm = "nip04" | "nip44";
-
 // Detects encryption algorithm (NIP-04 or NIP-44) of the ciphertext smartly, then decrypts it with corresponding decryption algorithm.
 const smartDecrypt = (signer: NostrSigner, senderPubkey: string, ciphertext: string): Promise<string> => {
   const lastPart = ciphertext.split("?iv=").at(-1);
@@ -140,21 +135,6 @@ const smartDecrypt = (signer: NostrSigner, senderPubkey: string, ciphertext: str
     return signer.nip04Decrypt(senderPubkey, ciphertext);
   }
   return signer.nip44Decrypt(senderPubkey, ciphertext);
-};
-
-// encrypt plaintext using specified algorithm (NIP-04 or NIP-44)
-const encryptWithAlgo = (
-  signer: NostrSigner,
-  algo: Nip46RpcEncryptionAlgorithm,
-  recipientPubkey: string,
-  plaintext: string,
-): Promise<string> => {
-  switch (algo) {
-    case "nip04":
-      return signer.nip04Encrypt(recipientPubkey, plaintext);
-    case "nip44":
-      return signer.nip44Encrypt(recipientPubkey, plaintext);
-  }
 };
 
 export type Nip46RpcClientOptions = {
@@ -171,13 +151,6 @@ export type Nip46RpcClientOptions = {
    * Default is just ignoring any auth challenges.
    */
   onAuthChallenge?: (authUrl: string) => void;
-
-  /**
-   * The algorithm to use for encrypting request payloads to remote signer.
-   *
-   * @default "nip04"
-   */
-  encryptionAlgorithm?: Nip46RpcEncryptionAlgorithm;
 };
 
 export const defaultRpcCliOptions: Required<Nip46RpcClientOptions> = {
@@ -185,7 +158,6 @@ export const defaultRpcCliOptions: Required<Nip46RpcClientOptions> = {
   onAuthChallenge: (_) => {
     console.debug("NIP-46 RPC: ignoring auth challenge...");
   },
-  encryptionAlgorithm: "nip04",
 };
 
 export class Nip46RpcClient {
@@ -367,12 +339,7 @@ export class Nip46RpcClient {
       method,
       params: nip46RpcParamsEncoders[method](params),
     };
-    const cipheredReq = await encryptWithAlgo(
-      this.#localSigner,
-      this.#options.encryptionAlgorithm,
-      this.#remotePubkey,
-      JSON.stringify(rpcReq),
-    );
+    const cipheredReq = await this.#localSigner.nip44Encrypt(this.#remotePubkey, JSON.stringify(rpcReq));
     const reqEv: NostrEventTemplate = {
       kind: 24133,
       tags: [["p", this.#remotePubkey]],
