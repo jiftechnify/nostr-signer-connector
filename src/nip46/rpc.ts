@@ -35,7 +35,7 @@ type ParsedNip46RpcResp = { id: string } & (
 );
 
 const parseNip46RpcResp = async (ev: NostrEvent, signer: NostrSigner): Promise<ParsedNip46RpcResp> => {
-  const plainContent = await smartDecrypt(signer, ev.pubkey, ev.content);
+  const plainContent = await signer.nip44Decrypt(ev.pubkey, ev.content);
   const { id, result, error } = JSON.parse(plainContent) as Nip46RpcResp;
 
   // there are cases that both `error` and `result` have values, so check error first
@@ -125,16 +125,6 @@ const nip46RpcResultDecoders: Nip46RpcResultDecoders = {
   nip04_decrypt: identity,
   nip44_encrypt: identity,
   nip44_decrypt: identity,
-};
-
-// Detects encryption algorithm (NIP-04 or NIP-44) of the ciphertext smartly, then decrypts it with corresponding decryption algorithm.
-const smartDecrypt = (signer: NostrSigner, senderPubkey: string, ciphertext: string): Promise<string> => {
-  const lastPart = ciphertext.split("?iv=").at(-1);
-  if (lastPart !== undefined && lastPart.length === 24) {
-    // ciphertext has an IV part, so assuming it's NIP-04 encrypted
-    return signer.nip04Decrypt(senderPubkey, ciphertext);
-  }
-  return signer.nip44Decrypt(senderPubkey, ciphertext);
 };
 
 export type Nip46RpcClientOptions = {
