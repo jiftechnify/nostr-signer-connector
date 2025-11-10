@@ -41,7 +41,7 @@
     "@biomejs/biome": "1.9.4",
     "@lerna-lite/cli": "^3.2.0",
     "@lerna-lite/publish": "^3.2.0",
-    "@lerna-lite/version": "^3.2.0",
+    "@lerna-lite/version": "^4.9.2",
     "@tsconfig/strictest": "^2.0.2",
     "@types/fs-extra": "^11.0.4",
     "esbuild": "^0.24.0",
