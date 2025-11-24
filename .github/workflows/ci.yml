@@ -14,7 +14,7 @@ jobs:
         node: ["18.x", "20.x", "21.x"]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Setup node ${{ matrix.node }}
         uses: actions/setup-node@v6
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Run typos
         uses: crate-ci/typos@v1.27.3
