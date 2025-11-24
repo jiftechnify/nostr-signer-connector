@@ -93,7 +93,7 @@ export class SecretKeySigner implements NostrSigner {
   /**
    * Returns the list of relays preferred by the user.
    *
-   * `getRelays()` on `SecretKeySigner` acutually returns an empty list because it doesn't have any information of user preferences about relays.
+   * `getRelays()` on `SecretKeySigner` actually returns an empty list because it doesn't have any information of user preferences about relays.
    */
   public async getRelays(): Promise<RelayList> {
     return {};
